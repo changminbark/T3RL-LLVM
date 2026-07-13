@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# uv
+# NOTE: uv.lock IS committed (reproducible envs); do not ignore it.
+
+# Experiment outputs
+results/
+
+# Person A's real corpus is dropped in here; keep it out of git
+data/corpus/*
+!data/corpus/.gitkeep
+
+# LLVM scratch artifacts
+*.ll
+*.bc
+!data/**/*.ll
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

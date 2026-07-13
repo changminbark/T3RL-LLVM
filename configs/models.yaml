@@ -1,0 +1,26 @@
+# Backend + sampling presets. Pick one with a driver flag set (wire your own loader if desired);
+# run_probe currently reads these values via CLI flags, this file documents the intended presets.
+
+presets:
+  mock:
+    backend: mock          # offline echo backend; no key/GPU needed
+    format: ir
+    k: 8
+    temperature: 0.9
+
+  qwen_api:
+    backend: api
+    model: "Qwen/Qwen2.5-Coder-32B-Instruct"   # confirm exact id with provider
+    base_url: "https://api.together.xyz/v1"     # example OpenAI-compatible endpoint
+    api_key_env: TOGETHER_API_KEY
+    format: ir
+    k: 16
+    temperature: 0.9
+    max_tokens: 2048
+
+  qwen_local:
+    backend: vllm
+    model: "Qwen/Qwen2.5-Coder-7B-Instruct"     # smaller for a single GPU
+    format: ir
+    k: 16
+    temperature: 0.9

@@ -42,6 +42,19 @@ uv run python -m probe.run_probe --corpus data/bootstrap --backend vllm \
 
 See `configs/models.yaml` for preset backend/sampling combinations.
 
+## Building the corpus
+
+`data/bootstrap/seed.jsonl` is generated from single-function C files in `data/c_sources/` using
+the local clang (`-O0` → `src_ir`, `-O3` → `o3_baseline_ir`, with `n_instructions`/`has_loops`
+computed from the IR). Regenerate it after adding C files:
+
+```bash
+uv run python -m probe.build_corpus --src data/c_sources --out data/bootstrap/seed.jsonl
+# add --with-mca to also fill mca_cycles_o3 (requires llvm-mca + llc)
+```
+
+Person A's `data/corpus/` (git-ignored) is the source of truth for the real runs.
+
 ## Real verifier & performance scorer
 
 The `stub` verifier only recognizes trivially-equal IR; `stub` perf uses an instruction-count

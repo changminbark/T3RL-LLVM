@@ -6,12 +6,14 @@ we return None so the caller records `invalid_syntax`.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-_CLANG = shutil.which("clang")
+from .tools import TARGET_TRIPLE, find_tool
+
+# Resolve clang from the same LLVM install as llc/llvm-mca (see tools.py for why this matters).
+_CLANG = find_tool("clang")
 
 
 def clang_available() -> bool:
@@ -19,7 +21,7 @@ def clang_available() -> bool:
 
 
 def lower_c_to_ir(c_source: str, timeout_s: int = 20) -> str | None:
-    """Compile C to textual LLVM IR at -O0. Returns the .ll text, or None on failure."""
+    """Compile C to textual LLVM IR at -O0 for the configured target. Returns .ll text or None."""
     if _CLANG is None:
         return None
     with tempfile.TemporaryDirectory() as td:
@@ -28,7 +30,8 @@ def lower_c_to_ir(c_source: str, timeout_s: int = 20) -> str | None:
         src.write_text(c_source)
         try:
             proc = subprocess.run(
-                [_CLANG, "-O0", "-emit-llvm", "-S", "-o", str(out), str(src)],
+                [_CLANG, f"--target={TARGET_TRIPLE}", "-O0", "-emit-llvm", "-S",
+                 "-o", str(out), str(src)],
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,

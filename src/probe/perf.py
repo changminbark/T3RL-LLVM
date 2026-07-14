@@ -8,16 +8,13 @@ real cycle estimate. Both return a `PerfScore`.
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 from .schema import PerfScore
-
-_LLC = shutil.which("llc")
-_MCA = shutil.which("llvm-mca")
+from .tools import TARGET_TRIPLE, find_tool
 
 
 class PerfScorer(ABC):
@@ -51,10 +48,26 @@ class StubPerf(PerfScorer):
 
 
 class McaPerf(PerfScorer):
-    """Real scorer: IR -> asm (llc) -> llvm-mca total cycles."""
+    """Real scorer: IR -> asm (llc) -> llvm-mca total cycles, for the configured target triple.
+
+    We run llvm-mca with --iterations=1. Its default (100) treats the whole function as a loop body
+    and lets the out-of-order engine overlap independent copies of stack-heavy -O0 code, which hides
+    its true cost: on the bootstrap corpus that makes mca rank -O0 slower than -O3 only 70% of the
+    time, vs 91% at --iterations=1. This is a single-execution cycle estimate, not a loop-aware one
+    (static analysis cannot see real trip counts — see docs for the remaining failure modes).
+    """
+
+    def __init__(self, triple: str = TARGET_TRIPLE, iterations: int = 1):
+        self.triple = triple
+        self.iterations = iterations
+        self.llc = find_tool("llc")
+        self.mca = find_tool("llvm-mca")
+
+    def available(self) -> bool:
+        return self.llc is not None and self.mca is not None
 
     def score(self, ir: str) -> PerfScore | None:
-        if _LLC is None or _MCA is None:
+        if not self.available():
             return None
         with tempfile.TemporaryDirectory() as td:
             ll = Path(td) / "mod.ll"
@@ -62,11 +75,17 @@ class McaPerf(PerfScorer):
             ll.write_text(ir)
             try:
                 if subprocess.run(
-                    [_LLC, "-o", str(asm), str(ll)], capture_output=True, timeout=30
+                    [self.llc, "-mtriple", self.triple, "-o", str(asm), str(ll)],
+                    capture_output=True,
+                    timeout=30,
                 ).returncode != 0:
                     return None
                 proc = subprocess.run(
-                    [_MCA, str(asm)], capture_output=True, text=True, timeout=30
+                    [self.mca, "-mtriple", self.triple,
+                     f"--iterations={self.iterations}", str(asm)],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
                 )
             except (subprocess.TimeoutExpired, OSError):
                 return None

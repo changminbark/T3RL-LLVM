@@ -17,14 +17,14 @@ from __future__ import annotations
 
 import argparse
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 from .perf import McaPerf
 from .schema import CorpusRecord
+from .tools import TARGET_TRIPLE, find_tool
 
-_CLANG = shutil.which("clang")
+_CLANG = find_tool("clang")
 _DEFINE_RE = re.compile(r"define[^@]*@([A-Za-z0-9_.$]+)\s*\(")
 _LABEL_DEF_RE = re.compile(r"^([A-Za-z0-9_.$]+):")
 _BR_TARGET_RE = re.compile(r"\blabel %([A-Za-z0-9_.$]+)")
@@ -35,7 +35,7 @@ def _clang_ir(c_path: Path, opt: str) -> str | None:
         return None
     try:
         proc = subprocess.run(
-            [_CLANG, opt, "-emit-llvm", "-S", "-o", "-", str(c_path)],
+            [_CLANG, f"--target={TARGET_TRIPLE}", opt, "-emit-llvm", "-S", "-o", "-", str(c_path)],
             capture_output=True,
             text=True,
             timeout=30,

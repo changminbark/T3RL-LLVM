@@ -265,7 +265,7 @@ signal isn't rationalized.
   Contract matches `AliveCliVerifier`: `alive-harness <src.ll> <tgt.ll> --timeout <s>` ->
   last-line `Verdict` JSON. Missing `alive-tv` -> `Verdict(error)`, never crashes.
 - Corpus builder scaled to per-function extraction (`build_corpus.build_records`, `--max-functions`),
-  deduped, bucketed. `function_id` is `<file-stem>.<func>`.
+  deduped, bucketed. `function_id` is `<relpath-without-ext>::<func>` (e.g. `a/foo::bar`), so same-stemmed files in different dirs don't collide.
 - Verdict-rate experiment: `python -m probe.verify_corpus --corpus <dir> --timeout 30`
   -> `results/verdict_rates.{json,txt}` (the go/no-go table).
 - Perf sanity-check: `python -m probe.perf_sanity --corpus <dir> --perf mca`.

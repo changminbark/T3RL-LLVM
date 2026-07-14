@@ -1,4 +1,6 @@
-from probe.build_corpus import count_instructions, has_loops, _function_name, list_defined_functions, _norm_hash, bucket_histogram
+from pathlib import Path
+
+from probe.build_corpus import count_instructions, has_loops, _function_name, list_defined_functions, _norm_hash, bucket_histogram, _function_id
 from probe.schema import CorpusRecord
 
 LOOP_IR = """define i32 @sum(i32 %n) {
@@ -67,6 +69,15 @@ def test_norm_hash_distinguishes_bodies():
     a = "define i32 @f() {\n  ret i32 0\n}"
     b = "define i32 @f() {\n  ret i32 1\n}"
     assert _norm_hash(a) != _norm_hash(b)
+
+
+def test_function_id_disambiguates_same_stem_across_dirs():
+    root = Path("/corpus")
+    a = _function_id(Path("/corpus/a/foo.c"), root, "bar")
+    b = _function_id(Path("/corpus/b/foo.c"), root, "bar")
+    assert a != b
+    assert a == "a/foo::bar"
+    assert b == "b/foo::bar"
 
 
 def test_bucket_histogram_counts_by_size_and_loop():

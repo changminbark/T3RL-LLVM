@@ -109,6 +109,12 @@ def extract_function(module_ir: str, func_name: str) -> str | None:
     return proc.stdout if proc.returncode == 0 else None
 
 
+def _function_id(c_path: Path, src_dir: Path, name: str) -> str:
+    """Unique id: relative path (dirs included) + function name, so same-stemmed files don't collide."""
+    rel = c_path.relative_to(src_dir).with_suffix("")
+    return f"{rel.as_posix()}::{name}"
+
+
 def _norm_hash(ir: str) -> str:
     """Dedup key: strip comments, collapse whitespace, hash. Same normalization idea as the stub verifier."""
     lines = []
@@ -155,7 +161,7 @@ def build_records(
                 mca_cycles = score.mca_cycles if score else None
             records.append(
                 CorpusRecord(
-                    function_id=f"{c_path.stem}.{name}",
+                    function_id=_function_id(c_path, src_dir, name),
                     src_ir=src_ir.strip(),
                     source_lang="c",
                     n_instructions=count_instructions(src_ir),

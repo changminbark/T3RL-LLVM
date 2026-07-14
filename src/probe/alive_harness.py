@@ -20,7 +20,7 @@ from .schema import Verdict, VerdictStatus
 
 _UNSUPPORTED_MARKERS = ("unsupported",)
 _TIMEOUT_MARKERS = ("smt error: timeout", "timed out", "timeout")
-_INCORRECT_MARKERS = ("doesn't verify", "value mismatch", "incorrect transformation")
+_INCORRECT_MARKERS = ("doesn't verify", "value mismatch")
 _CORRECT_MARKERS = ("seems to be correct",)
 
 
@@ -48,13 +48,13 @@ def classify_alive_output(
         return Verdict(status=VerdictStatus.unsupported)
     if any(m in low for m in _TIMEOUT_MARKERS):
         return Verdict(status=VerdictStatus.timeout)
-    if any(m in low for m in _CORRECT_MARKERS):
-        return Verdict(status=VerdictStatus.verified)
     if any(m in low for m in _INCORRECT_MARKERS):
         return Verdict(
             status=VerdictStatus.counterexample,
             counterexample=_capture_counterexample(text),
         )
+    if any(m in low for m in _CORRECT_MARKERS):
+        return Verdict(status=VerdictStatus.verified)
     return Verdict(
         status=VerdictStatus.error,
         counterexample=(stderr or stdout)[:2000].strip() or None,

@@ -81,6 +81,20 @@ def test_garbage_is_error():
     assert "boom" in (v.counterexample or "")
 
 
+def test_mixed_output_is_conservative_counterexample():
+    # A module output containing BOTH a correct and a failing transformation
+    # must be classified counterexample, never verified.
+    mixed = (
+        "Transformation seems to be correct!\n"
+        "Transformation doesn't verify!\n"
+        "ERROR: Value mismatch\nExample:\n i32 %x = #x00000001\n"
+    )
+    from probe.alive_harness import classify_alive_output
+    from probe.schema import VerdictStatus
+    v = classify_alive_output(mixed, "", 0, False)
+    assert v.status is VerdictStatus.counterexample
+
+
 import os
 import stat
 import subprocess

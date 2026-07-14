@@ -15,6 +15,9 @@ dependencies = [
 local = ["vllm>=0.5"]
 dev = ["pytest>=8.0"]
 
+[project.scripts]
+alive-harness = "probe.alive_harness:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

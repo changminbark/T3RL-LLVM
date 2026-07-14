@@ -16,15 +16,19 @@ source of truth for the real runs — confirm both sides compute these the same 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import shutil
 import subprocess
+import tempfile
+from collections import Counter
 from pathlib import Path
 
 from .perf import McaPerf
 from .schema import CorpusRecord
 
 _CLANG = shutil.which("clang")
+_LLVM_EXTRACT = shutil.which("llvm-extract")
 _DEFINE_RE = re.compile(r"define[^@]*@([A-Za-z0-9_.$]+)\s*\(")
 _LABEL_DEF_RE = re.compile(r"^([A-Za-z0-9_.$]+):")
 _BR_TARGET_RE = re.compile(r"\blabel %([A-Za-z0-9_.$]+)")
@@ -81,6 +85,90 @@ def has_loops(ir: str) -> bool:
     return False
 
 
+def list_defined_functions(ir: str) -> list[str]:
+    """Names of all functions with a body (`define`) in a module, in source order."""
+    return _DEFINE_RE.findall(ir)
+
+
+def extract_function(module_ir: str, func_name: str) -> str | None:
+    """Pull one function into its own module via llvm-extract. None if tool absent/fails."""
+    if _LLVM_EXTRACT is None:
+        return None
+    with tempfile.TemporaryDirectory() as td:
+        mod = Path(td) / "mod.ll"
+        mod.write_text(module_ir)
+        try:
+            proc = subprocess.run(
+                [_LLVM_EXTRACT, f"-func={func_name}", "-S", "-o", "-", str(mod)],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _norm_hash(ir: str) -> str:
+    """Dedup key: strip comments, collapse whitespace, hash. Same normalization idea as the stub verifier."""
+    lines = []
+    for line in ir.splitlines():
+        line = re.sub(r";.*$", "", line)
+        line = re.sub(r"\s+", " ", line).strip()
+        if line:
+            lines.append(line)
+    return hashlib.sha1("\n".join(lines).encode()).hexdigest()
+
+
+def bucket_histogram(records: list[CorpusRecord]) -> dict[tuple[str, bool], int]:
+    """Counts per (size_bucket, has_loops) for the end-of-run summary."""
+    return dict(Counter((r.size_bucket(), r.has_loops) for r in records))
+
+
+def build_records(
+    src_dir: Path, mca: "McaPerf | None", max_functions: int | None = None
+) -> list[CorpusRecord]:
+    """Walk .c files recursively; compile each -O0/-O3; split every defined function.
+
+    function_id is `<file-stem>.<func>` (unique across files). Deduped by normalized -O0 IR.
+    Stops once `max_functions` records are collected.
+    """
+    records: list[CorpusRecord] = []
+    seen: set[str] = set()
+    for c_path in sorted(src_dir.rglob("*.c")):
+        o0_mod = _clang_ir(c_path, "-O0")
+        if o0_mod is None:
+            continue
+        o3_mod = _clang_ir(c_path, "-O3")
+        for name in list_defined_functions(o0_mod):
+            src_ir = extract_function(o0_mod, name)
+            if not src_ir:  # llvm-extract absent or function empty
+                continue
+            h = _norm_hash(src_ir)
+            if h in seen:
+                continue
+            seen.add(h)
+            o3_ir = extract_function(o3_mod, name) if o3_mod else None
+            mca_cycles = None
+            if mca is not None and o3_ir:
+                score = mca.score(o3_ir)
+                mca_cycles = score.mca_cycles if score else None
+            records.append(
+                CorpusRecord(
+                    function_id=f"{c_path.stem}.{name}",
+                    src_ir=src_ir.strip(),
+                    source_lang="c",
+                    n_instructions=count_instructions(src_ir),
+                    has_loops=has_loops(src_ir),
+                    o3_baseline_ir=o3_ir.strip() if o3_ir else None,
+                    mca_cycles_o3=mca_cycles,
+                )
+            )
+            if max_functions is not None and len(records) >= max_functions:
+                return records
+    return records
+
+
 def build_record(c_path: Path, mca: McaPerf | None) -> CorpusRecord | None:
     src_ir = _clang_ir(c_path, "-O0")
     if src_ir is None:
@@ -107,6 +195,7 @@ def main() -> None:
     p.add_argument("--src", required=True, help="dir of single-function *.c files")
     p.add_argument("--out", required=True, help="output JSONL path")
     p.add_argument("--with-mca", action="store_true", help="fill mca_cycles_o3 via llvm-mca")
+    p.add_argument("--max-functions", type=int, default=None, help="cap total records")
     args = p.parse_args()
 
     if _CLANG is None:
@@ -114,18 +203,26 @@ def main() -> None:
 
     mca = McaPerf() if args.with_mca else None
     src_dir = Path(args.src)
-    records: list[CorpusRecord] = []
-    skipped: list[str] = []
-    for c_path in sorted(src_dir.glob("*.c")):
-        rec = build_record(c_path, mca)
-        (records.append(rec) if rec else skipped.append(c_path.name))
+
+    if _LLVM_EXTRACT is not None:
+        records = build_records(src_dir, mca, args.max_functions)
+    else:
+        # Fallback: no llvm-extract -> one record per whole file (original behavior).
+        print("llvm-extract not found; falling back to whole-file records")
+        records = []
+        for c_path in sorted(src_dir.rglob("*.c")):
+            rec = build_record(c_path, mca)
+            if rec:
+                records.append(rec)
+            if args.max_functions and len(records) >= args.max_functions:
+                break
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(r.model_dump_json() for r in records) + "\n")
     print(f"wrote {len(records)} records to {out}")
-    if skipped:
-        print(f"skipped (compile failed): {', '.join(skipped)}")
+    for (bucket, loops), n in sorted(bucket_histogram(records).items()):
+        print(f"  {bucket:>7}  loops={str(loops):5}  {n}")
 
 
 if __name__ == "__main__":

@@ -218,6 +218,11 @@ Classification pipeline for a single rewrite:
 - When Person A's CLI is ready, implement `AliveCliVerifier` and real `perf.py` against
   `llvm-mca`.
 - Re-run Steps 3–4 on the real corpus. No changes above the verifier/perf boundary.
+- **DONE for perf:** `McaPerf` implemented; perf-scorer sanity check run (see
+  `docs/perf-scorer-findings.md`). Key result: `llvm-mca --iterations=1` ranks -O0 slower than -O3
+  on **98% of loop-free** functions but only **69% of loops** — so the mca reward is trustworthy on
+  loop-free code and unreliable on loops (same bias as Alive2). This reinforces targeting the
+  **loop-free buckets** for the go/no-go. Verifier swap still pending Person A's CLI.
 
 ---
 

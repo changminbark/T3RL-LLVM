@@ -66,6 +66,16 @@ uv run python -m probe.run_probe --corpus data/corpus --backend api --model <id>
     --k 16 --verifier alive --perf mca
 ```
 
+**LLVM toolchain:** `--perf mca` and `--with-mca` need `llc` + `llvm-mca` (e.g. `brew install
+llvm`). All LLVM tools (clang, llc, llvm-mca) must come from the *same* install — on macOS, Apple's
+clang emits IR that Homebrew's tools crash on. `tools.py` auto-resolves the Homebrew keg; override
+with `LLVM_BIN=/path/to/llvm/bin` and the target triple with `PROBE_TARGET` (default
+`aarch64-linux-gnu`, chosen so llvm-mca doesn't choke on macOS asm directives).
+
+**Caveat — `llvm-mca` is only a reliable speed proxy for loop-free functions (98%), not loops
+(69%).** We run it at `--iterations=1`; see [`docs/perf-scorer-findings.md`](docs/perf-scorer-findings.md)
+for the measurements and why.
+
 ## Key details
 
 - **Generation formats:** `--format ir` (model emits LLVM IR directly) or `--format c` (model

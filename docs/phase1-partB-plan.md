@@ -258,3 +258,16 @@ signal isn't rationalized.
 - Confirm which concrete model(s) to prioritize first (Qwen2.5-Coder class) so `configs/models.yaml`
   has real ids.
 - `PerfScore` already carries `code_size_bytes` (secondary metric) to avoid a later schema change.
+
+## Part A status (Person A confirmation)
+
+- `alive-harness` CLI implemented (`src/probe/alive_harness.py`, console-script entry point).
+  Contract matches `AliveCliVerifier`: `alive-harness <src.ll> <tgt.ll> --timeout <s>` ->
+  last-line `Verdict` JSON. Missing `alive-tv` -> `Verdict(error)`, never crashes.
+- Corpus builder scaled to per-function extraction (`build_corpus.build_records`, `--max-functions`),
+  deduped, bucketed. `function_id` is `<file-stem>.<func>`.
+- Verdict-rate experiment: `python -m probe.verify_corpus --corpus <dir> --timeout 30`
+  -> `results/verdict_rates.{json,txt}` (the go/no-go table).
+- Perf sanity-check: `python -m probe.perf_sanity --corpus <dir> --perf mca`.
+- All Part A logic unit-tested offline (no LLVM/Alive2 needed). Real corpus + real verdict table
+  pending a later session that installs LLVM + builds Alive2.

@@ -26,6 +26,44 @@ uv run python -m probe.run_probe --corpus data/bootstrap --backend mock --k 8 \
 That prints a bucketed `solve@K` table and writes per-run artifacts to `results/`
 (`*.rewrites.jsonl`, `*.summary.json`, `*.table.txt`).
 
+## End-to-end (real run)
+
+The offline quickstart above uses stubs. A real run needs three external things: the **LLVM
+toolchain**, the **Alive2 oracle**, and a **model backend**. Ordered runbook:
+
+```bash
+# 0. Python env
+uv sync --extra dev
+
+# 1. LLVM toolchain (llc, llvm-mca, llvm-extract). All tools must come from ONE install.
+brew install llvm                       # macOS; or apt/distro packages on Linux
+export LLVM_BIN="$(brew --prefix llvm)/bin"
+
+# 2. Alive2 oracle — build once (~30GB, ~1-2hr). Full guide: docs/alive2-build.md
+git submodule update --init --recursive
+./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-llvm.sh && ./scripts/alive2/03-build-alive2.sh
+source scripts/alive2/env.sh            # exports ALIVE_TV; alive-harness resolves it
+
+# 3. Build the real corpus (single-function .c tree, e.g. llvm-test-suite/SingleSource)
+uv run python -m probe.build_corpus --src /path/to/SingleSource \
+    --out data/corpus/corpus.jsonl --with-mca --max-functions 800
+
+# 4. Part A — verifier feasibility (the go/no-go table) + perf sanity
+uv run python -m probe.verify_corpus --corpus data/corpus --timeout 30   # -> results/verdict_rates.{json,txt}
+uv run python -m probe.perf_sanity  --corpus data/corpus --perf mca      # llvm-mca ranks O0 >= O3?
+
+# 5. Part B — model probe (real solve@K) against the same oracle
+export TOGETHER_API_KEY=...
+uv run python -m probe.run_probe --corpus data/corpus --backend api \
+    --model "Qwen/Qwen2.5-Coder-32B-Instruct" --base-url https://api.together.xyz/v1 \
+    --api-key-env TOGETHER_API_KEY --k 16 --verifier alive --perf mca
+```
+
+Steps 1–2 are independent (Alive2 builds its own LLVM) and can run in either order. You get partial
+signal before finishing the slow parts: a model key alone gives Part B's syntactic-validity/format
+numbers (`--verifier stub --perf stub`); adding `brew install llvm` gives real `llvm-mca` scoring;
+only Alive2 unlocks real equivalence verdicts. Details in the sections below.
+
 ## Running against a real model
 
 ```bash
@@ -58,8 +96,9 @@ Person A's `data/corpus/` (git-ignored) is the source of truth for the real runs
 ## Real verifier & performance scorer
 
 The `stub` verifier only recognizes trivially-equal IR; `stub` perf uses an instruction-count
-proxy. Once LLVM tools and Person A's Alive2 harness are installed, swap them in with no other
-code changes:
+proxy. Once LLVM tools and the Alive2 harness are installed (build Alive2 with
+[`docs/alive2-build.md`](docs/alive2-build.md); `--verifier alive` shells out to `alive-harness`,
+which finds `alive-tv` via `$ALIVE_TV`), swap them in with no other code changes:
 
 ```bash
 uv run python -m probe.run_probe --corpus data/corpus --backend api --model <id> \

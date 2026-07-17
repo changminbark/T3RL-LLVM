@@ -1,4 +1,9 @@
-"""Build corpus JSONL from C source files using the local clang.
+"""Build corpus JSONL from C source files using the resolved LLVM clang.
+
+clang and llvm-extract are resolved via `tools.py` (honoring $LLVM_BIN / the Homebrew keg) and IR
+is emitted for `$PROBE_TARGET` (default aarch64-linux-gnu), so the corpus matches the toolchain the
+perf scorer uses — do NOT switch these back to PATH `clang`, which on macOS is Apple's and emits IR
+that Homebrew's llc/llvm-mca crash on.
 
 Each *.c file under the input dir should contain a single function. We compile it at -O0
 (src_ir, the record's source) and -O3 (o3_baseline_ir, the "beat the compiler" baseline),
@@ -138,8 +143,8 @@ def build_records(
 ) -> list[CorpusRecord]:
     """Walk .c files recursively; compile each -O0/-O3; split every defined function.
 
-    function_id is `<file-stem>.<func>` (unique across files). Deduped by normalized -O0 IR.
-    Stops once `max_functions` records are collected.
+    function_id is `<relpath-without-ext>::<func>` (e.g. `a/foo::bar`), so same-stemmed files in
+    different dirs don't collide. Deduped by normalized -O0 IR. Stops at `max_functions` records.
     """
     records: list[CorpusRecord] = []
     seen: set[str] = set()

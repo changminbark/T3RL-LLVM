@@ -1,0 +1,3 @@
+[submodule "third_party/alive2"]
+	path = third_party/alive2
+	url = https://github.com/AliveToolkit/alive2

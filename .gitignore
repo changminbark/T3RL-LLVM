@@ -23,3 +23,7 @@ data/corpus/*
 .DS_Store
 .idea/
 .vscode/
+
+# Alive2/LLVM build artifacts
+third_party/llvm-project/
+third_party/alive2/build/

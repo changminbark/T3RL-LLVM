@@ -35,14 +35,10 @@ toolchain**, the **Alive2 oracle**, and a **model backend**. Ordered runbook:
 # 0. Python env
 uv sync --extra dev
 
-# 1. LLVM toolchain (llc, llvm-mca, llvm-extract). All tools must come from ONE install.
-brew install llvm                       # macOS; or apt/distro packages on Linux
-export LLVM_BIN="$(brew --prefix llvm)/bin"
-
-# 2. Alive2 oracle — build once (~30GB, ~1-2hr). Full guide: docs/alive2-build.md
+# 1-2. Alive2 oracle + LLVM 21 toolchain (~15 min, no from-source LLVM). Full guide: docs/alive2-build.md
 git submodule update --init --recursive
-./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-llvm.sh && ./scripts/alive2/03-build-alive2.sh
-source scripts/alive2/env.sh            # exports ALIVE_TV; alive-harness resolves it
+./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-alive2.sh
+source scripts/alive2/env.sh            # exports ALIVE_TV (oracle) + LLVM_BIN (llvm@21 for clang/llc/llvm-mca)
 
 # 3. Build the real corpus. fetch-corpus.sh shallow-clones llvm-test-suite and prints
 #    its SingleSource path. Run this on the Linux box where you built LLVM/Alive2 — clang

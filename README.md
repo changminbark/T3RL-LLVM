@@ -44,8 +44,11 @@ git submodule update --init --recursive
 ./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-llvm.sh && ./scripts/alive2/03-build-alive2.sh
 source scripts/alive2/env.sh            # exports ALIVE_TV; alive-harness resolves it
 
-# 3. Build the real corpus (single-function .c tree, e.g. llvm-test-suite/SingleSource)
-uv run python -m probe.build_corpus --src /path/to/SingleSource \
+# 3. Build the real corpus. fetch-corpus.sh shallow-clones llvm-test-suite and prints
+#    its SingleSource path. Run this on the Linux box where you built LLVM/Alive2 — clang
+#    emits IR for aarch64-linux-gnu, which is native there; on macOS, files that include
+#    Linux system headers fail to compile and get skipped.
+uv run python -m probe.build_corpus --src "$(./scripts/fetch-corpus.sh -q)" \
     --out data/corpus/corpus.jsonl --with-mca --max-functions 800
 
 # 4. Part A — verifier feasibility (the go/no-go table) + perf sanity

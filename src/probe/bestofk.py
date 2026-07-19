@@ -52,3 +52,42 @@ def per_function_speedups(records: list[RewriteResult]) -> list[float]:
         else:
             out.append(1.0)
     return out
+
+
+def _agg(records_by_function, fids, ks):
+    """Coverage/mean-speedup per k, averaged over the given function ids."""
+    out = {}
+    n_fns = len(fids)
+    for k in ks:
+        cov = 0.0
+        spd = 0.0
+        for fid in fids:
+            recs = records_by_function[fid]
+            n = len(recs)
+            c = sum(1 for r in recs if r.outcome is RewriteOutcome.verified_faster)
+            cov += passk_estimator(n, c, k)
+            spd += expected_best_speedup_at_k(per_function_speedups(recs), k)
+        out[k] = {
+            "coverage": cov / n_fns if n_fns else 0.0,
+            "mean_speedup": spd / n_fns if n_fns else 1.0,
+            "n_functions": n_fns,
+        }
+    return out
+
+
+def curve(records_by_function, buckets, ks):
+    """Best-of-K curve overall and per (size_bucket, has_loops)."""
+    all_fids = list(records_by_function)
+    result = {"overall": _agg(records_by_function, all_fids, ks), "by_bucket": {}}
+
+    by_bucket_fids: dict[str, list[str]] = {}
+    for fid in all_fids:
+        b = buckets.get(fid)
+        if b is None:
+            continue
+        key = f"{b[0]}|loops={b[1]}"
+        by_bucket_fids.setdefault(key, []).append(fid)
+
+    for key, fids in sorted(by_bucket_fids.items()):
+        result["by_bucket"][key] = _agg(records_by_function, fids, ks)
+    return result

@@ -66,6 +66,20 @@ job is to make the *base model itself* produce more verified-faster rewrites, so
 clears this bar — ideally shifting the whole K-curve up. If TTRL only matches best-of-K, it isn't
 worth the training cost; the curve here is the yardstick.
 
+## Figures
+
+Regenerate with `uv run --with matplotlib --with numpy python scripts/make_plots.py`.
+
+- **Best-of-K baseline** — `docs/figures/plot1_bestofk_curve.png` (coverage + mean speedup vs K;
+  the "LLVM as a tool" result: best-of-1 → best-of-16 ~doubles coverage, curve saturates).
+- **SLM vs LLM prior** — `docs/figures/plot2_slm_vs_llm.png` (capability resonance; SLM fails on IR
+  syntax, LLM has a real un-gamed prior).
+- **Coverage by bucket** — `docs/figures/plot3_coverage_by_bucket.png` (where the headroom is).
+
+![best-of-K baseline](figures/plot1_bestofk_curve.png)
+![SLM vs LLM](figures/plot2_slm_vs_llm.png)
+![coverage by bucket](figures/plot3_coverage_by_bucket.png)
+
 ## Caveats (carried from Phase 1)
 
 - **Small, trivial corpus** (64 functions, several buckets n=1). Directional, not final — a

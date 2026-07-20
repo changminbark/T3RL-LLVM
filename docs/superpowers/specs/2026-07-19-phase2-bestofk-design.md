@@ -71,9 +71,9 @@ These are closed-form (no Monte-Carlo needed at n ≤ 16), deterministic, and lo
 - `per_function_speedups(records: list[RewriteResult]) -> list[float]` — map a function's rewrite
   records to per-sample achieved speedups (`max(1.0, speedup_vs_o3)` if `verified_faster`, else
   `1.0`).
-- `curve(records_by_function: dict[str, list[RewriteResult]], ks: list[int]) -> dict` — per-K
-  `{coverage, mean_speedup, n_functions}`, overall and per `(size_bucket, has_loops)` (bucket via
-  the corpus record; the driver joins).
+- `curve(records_by_function: dict[str, list[RewriteResult]], buckets: dict[str, tuple[str, bool]], ks: list[int]) -> dict`
+  — per-K `{coverage, mean_speedup, n_functions}`, overall and per `(size_bucket, has_loops)`
+  (`buckets` maps `function_id -> (size_bucket, has_loops)`; the driver joins from the corpus).
 
 ### `src/probe/phase2_baseline.py` (driver / report)
 

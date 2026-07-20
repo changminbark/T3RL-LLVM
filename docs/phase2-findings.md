@@ -76,6 +76,11 @@ Regenerate with `uv run --with matplotlib --with numpy python scripts/make_plots
   syntax, LLM has a real un-gamed prior).
 - **Coverage by bucket** — `docs/figures/plot3_coverage_by_bucket.png` (where the headroom is).
 
+- **Base model vs base + LLVM** — `docs/figures/plot4_base_vs_llm_tool.png` (the direct answer:
+  base alone ships 0% *trustworthy* speedups since it can't verify; the oracle adds *trust* at k=1
+  then *selection* to k=16 → 28.1%).
+
+![base vs base+LLVM](figures/plot4_base_vs_llm_tool.png)
 ![best-of-K baseline](figures/plot1_bestofk_curve.png)
 ![SLM vs LLM](figures/plot2_slm_vs_llm.png)
 ![coverage by bucket](figures/plot3_coverage_by_bucket.png)

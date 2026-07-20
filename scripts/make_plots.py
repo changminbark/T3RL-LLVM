@@ -129,3 +129,33 @@ for i, v in enumerate(cov8):
 fig.tight_layout()
 fig.savefig(OUT / "plot3_coverage_by_bucket.png", dpi=150)
 print("wrote", OUT / "plot3_coverage_by_bucket.png")
+
+# ---------- Plot 4: base model vs base + LLVM (the direct comparison) ----------
+cov1 = curve["1"]["coverage"] * 100      # % of single samples that are verified-faster
+cov16 = curve["16"]["coverage"] * 100    # best-of-16 coverage
+conditions = ["Base model\n(no oracle)", "Base + LLVM\nbest-of-1", "Base + LLVM\nbest-of-16"]
+shippable = [0.0, cov1, cov16]           # provably-correct faster rewrites you can actually use
+colors = ["#9e9e9e", "#2ca02c", "#1f77b4"]
+
+fig, ax = plt.subplots(figsize=(7.5, 4.8))
+bars = ax.bar(conditions, shippable, color=colors, width=0.6)
+# Ghost bar: base model DOES emit ~cov1% correct-faster code, but unverifiable -> not shippable.
+ax.bar([0], [cov1], width=0.6, facecolor="none", edgecolor="#9e9e9e", hatch="///", linewidth=1.2)
+ax.set_ylabel("% functions with a PROVABLY correct, faster-than-O3 rewrite")
+ax.set_ylim(0, 35)
+ax.set_title("Base model vs base + LLVM tool (deepseek-v4-pro, 64 fns)\n"
+             "Same weights - the LLVM oracle adds trust (k=1) then selection (k->16)")
+for b, v in zip(bars, shippable):
+    ax.annotate(f"{v:.1f}%", (b.get_x() + b.get_width() / 2, v),
+                textcoords="offset points", xytext=(0, 4), ha="center", fontweight="bold")
+ax.annotate(f"~{cov1:.0f}% correct but\nUNVERIFIABLE\n(can't tell which)", (0, cov1),
+            textcoords="offset points", xytext=(0, 10), ha="center", fontsize=8, color="#616161")
+ax.annotate("verification\nvalue", xy=(1, cov1), xytext=(0.5, cov1 + 6),
+            fontsize=8, ha="center", color="#2ca02c",
+            arrowprops=dict(arrowstyle="->", color="#2ca02c"))
+ax.annotate("selection\nvalue", xy=(2, cov16), xytext=(1.5, cov16 + 4),
+            fontsize=8, ha="center", color="#1f77b4",
+            arrowprops=dict(arrowstyle="->", color="#1f77b4"))
+fig.tight_layout()
+fig.savefig(OUT / "plot4_base_vs_llm_tool.png", dpi=150)
+print("wrote", OUT / "plot4_base_vs_llm_tool.png")

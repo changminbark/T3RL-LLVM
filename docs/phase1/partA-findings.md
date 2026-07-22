@@ -1,7 +1,9 @@
 # Phase 1 · Part A — Verifier & Corpus Feasibility — Findings
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N) — see [README.md](README.md).
+
 **Date:** 2026-07-18 · **Machine:** macOS arm64, 8-core, 16 GB.
-**Toolchain:** Alive2 v21.0 + LLVM/clang 21.1.8 (Homebrew `llvm@21`). Build: `docs/alive2-build.md`.
+**Toolchain:** Alive2 v21.0 + LLVM/clang 21.1.8 (Homebrew `llvm@21`). Build: `alive2-build.md`.
 
 ## What was run
 

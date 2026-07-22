@@ -1,4 +1,4 @@
-"""Render Phase 1/2 result plots from saved run artifacts into docs/figures/.
+"""Render Phase 1/2 result plots from saved run artifacts into docs/phase{1,2}/figures/.
 
 Run (matplotlib/numpy pulled in ephemerally, not project deps):
     uv run --with matplotlib --with numpy python scripts/make_plots.py
@@ -20,8 +20,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "docs" / "figures"
-OUT.mkdir(parents=True, exist_ok=True)
+# Figures live under each phase's folder; plot2 is a Phase 1 result, the rest are Phase 2.
+P1 = ROOT / "docs" / "phase1" / "figures"
+P2 = ROOT / "docs" / "phase2" / "figures"
+P1.mkdir(parents=True, exist_ok=True)
+P2.mkdir(parents=True, exist_ok=True)
 
 PHASE2_JSON = os.environ.get("PHASE2_JSON", str(ROOT / "results/phase2_k16/phase2_baseline.json"))
 SLM_GLOB = os.environ.get("SLM_GLOB", str(ROOT / "results/probe_slm_qwen1p5b/*.rewrites.jsonl"))
@@ -63,7 +66,7 @@ spd = [curve[str(k)]["mean_speedup"] for k in ks]
 fig, ax1 = plt.subplots(figsize=(7, 4.5))
 c1 = "#1f77b4"
 ax1.plot(ks, cov, "o-", color=c1, lw=2)
-ax1.set_xlabel("K (samples per function)")
+ax1.set_xlabel("K (selection budget; N=16 samples per function)")
 ax1.set_ylabel("Coverage: % of functions beating -O3", color=c1)
 ax1.tick_params(axis="y", labelcolor=c1)
 ax1.set_xticks(ks)
@@ -81,8 +84,8 @@ ax1.set_title("Phase 2 - best-of-K baseline (deepseek-v4-pro, 64 fns)\n"
               "LLVM as a tool: best-of-1 -> best-of-16 ~doubles coverage; curve saturates")
 ax1.axvspan(8, 16, alpha=0.06, color="gray")
 fig.tight_layout()
-fig.savefig(OUT / "plot1_bestofk_curve.png", dpi=150)
-print("wrote", OUT / "plot1_bestofk_curve.png")
+fig.savefig(P2 / "plot1_bestofk_curve.png", dpi=150)
+print("wrote", P2 / "plot1_bestofk_curve.png")
 
 # ---------- Plot 2: SLM vs LLM prior ----------
 slm = load_rewrites(SLM_GLOB)
@@ -99,7 +102,7 @@ b1 = ax.bar(x - w / 2, [v * 100 for v in slm_vals], w, label="SLM  qwen2.5-coder
 b2 = ax.bar(x + w / 2, [v * 100 for v in llm_vals], w, label="LLM  deepseek-v4-pro", color="#2ca02c")
 ax.set_ylabel("percent")
 ax.set_xticks(x); ax.set_xticklabels(metrics)
-ax.set_title("Does the prior resonate with capability? (same 64 fns, k=8)\n"
+ax.set_title("Does the prior resonate with capability? (same 64 fns, K=8)\n"
              "SLM fails on IR *syntax* (95% invalid); LLM has a real, un-gamed prior")
 ax.legend()
 for bars in (b1, b2):
@@ -107,8 +110,8 @@ for bars in (b1, b2):
         ax.annotate(f"{b.get_height():.0f}%", (b.get_x() + b.get_width() / 2, b.get_height()),
                     textcoords="offset points", xytext=(0, 3), ha="center", fontsize=8)
 fig.tight_layout()
-fig.savefig(OUT / "plot2_slm_vs_llm.png", dpi=150)
-print("wrote", OUT / "plot2_slm_vs_llm.png")
+fig.savefig(P1 / "plot2_slm_vs_llm.png", dpi=150)
+print("wrote", P1 / "plot2_slm_vs_llm.png")
 
 # ---------- Plot 3: coverage by bucket ----------
 bybk = json.load(open(PHASE2_JSON))["curve"]["by_bucket"]
@@ -127,8 +130,8 @@ ax.set_title("Where the wins are (best-of-8, by size|loops)\n"
 for i, v in enumerate(cov8):
     ax.annotate(f"{v:.0f}%", (v, i), textcoords="offset points", xytext=(4, 0), va="center", fontsize=8)
 fig.tight_layout()
-fig.savefig(OUT / "plot3_coverage_by_bucket.png", dpi=150)
-print("wrote", OUT / "plot3_coverage_by_bucket.png")
+fig.savefig(P2 / "plot3_coverage_by_bucket.png", dpi=150)
+print("wrote", P2 / "plot3_coverage_by_bucket.png")
 
 # ---------- Plot 4: base model vs base + LLVM (the direct comparison) ----------
 cov1 = curve["1"]["coverage"] * 100      # % of single samples that are verified-faster
@@ -157,5 +160,5 @@ ax.annotate("selection\nvalue", xy=(2, cov16), xytext=(1.5, cov16 + 4),
             fontsize=8, ha="center", color="#1f77b4",
             arrowprops=dict(arrowstyle="->", color="#1f77b4"))
 fig.tight_layout()
-fig.savefig(OUT / "plot4_base_vs_llm_tool.png", dpi=150)
-print("wrote", OUT / "plot4_base_vs_llm_tool.png")
+fig.savefig(P2 / "plot4_base_vs_llm_tool.png", dpi=150)
+print("wrote", P2 / "plot4_base_vs_llm_tool.png")

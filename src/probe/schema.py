@@ -1,6 +1,6 @@
 """Shared data models. The JSONL corpus schema here is the day-one contract with Person A.
 
-Keep `CorpusRecord`, `Verdict`, and `PerfScore` in lockstep with `docs/phase1-partB-plan.md`.
+Keep `CorpusRecord`, `Verdict`, and `PerfScore` in lockstep with `docs/phase1/partB-plan.md`.
 Any change to these must be mirrored in that doc in the same commit (the sync mechanism).
 """
 

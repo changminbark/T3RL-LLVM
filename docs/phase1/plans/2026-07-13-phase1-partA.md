@@ -1,5 +1,7 @@
 # Phase 1 Part A — Verifier & Corpus Feasibility — Implementation Plan
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N). Note: code snippets below keep the source's local param names `n`/`k`. See [../README.md](../README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build Part A's four deliverables — the `alive-harness` Alive2 wrapper CLI, a scaled per-function corpus builder, the verdict-rate experiment driver, and a perf sanity-check — so they satisfy Part B's frozen seams and are fully unit-tested offline (no LLVM/Alive2 installed this session).
@@ -920,7 +922,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 5: Full-suite verification + sync-doc note
 
 **Files:**
-- Modify: `docs/phase1-partB-plan.md` (append a short Part A confirmation note) — OR add it to `docs/phase1-partA-plan.md`; pick the shared sync doc both sessions read.
+- Modify: `../partB-plan.md` (append a short Part A confirmation note) — OR add it to `../partA-plan.md`; pick the shared sync doc both sessions read.
 
 **Interfaces:** none (documentation + verification only).
 
@@ -942,7 +944,7 @@ Expected: each prints usage; `uv run alive-harness --help` confirms the console-
 
 - [ ] **Step 3: Append the interface-confirmation note to the shared sync doc**
 
-Add to the bottom of `docs/phase1-partB-plan.md` (the doc both sessions read), under a new heading:
+Add to the bottom of `../partB-plan.md` (the doc both sessions read), under a new heading:
 
 ```markdown
 ## Part A status (Person A confirmation)
@@ -962,7 +964,7 @@ Add to the bottom of `docs/phase1-partB-plan.md` (the doc both sessions read), u
 - [ ] **Step 4: Commit**
 
 ```bash
-git add docs/phase1-partB-plan.md
+git add ../partB-plan.md
 git commit -m "docs(partA): confirm alive-harness contract + Part A status in sync doc
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"

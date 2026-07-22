@@ -1,7 +1,9 @@
 # Phase 2 — Best-of-K Inference-Time Baseline — Design
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N). Note: code snippets below keep the source's local param names `n`/`k`. See [../README.md](../README.md).
+
 > **Status:** approved design, pre-implementation.
-> **Companion docs:** `docs/phase1-partA-plan.md` (master brief), `docs/phase1-partA-findings.md`
+> **Companion docs:** `../../phase1/partA-plan.md` (master brief), `../../phase1/partA-findings.md`
 > (Phase 1 verifier results), Phase 1 Workstream-B `solve@K` results in `results/probe_*`.
 
 ## Context

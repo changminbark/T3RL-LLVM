@@ -1,5 +1,7 @@
 # Phase 2 — Best-of-K Baseline Implementation Plan
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N). Note: code snippets below keep the source's local param names `n`/`k`. See [../README.md](../README.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the best-of-K inference-time baseline — a pure selection+aggregation layer over existing `run_probe` rollouts that reports Coverage@K and MeanSpeedup@K over `-O3` as a K-scaling curve (K∈{1,2,4,8,16}), the number TTRL must later beat.
@@ -472,7 +474,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task 4: Run the baseline + findings note
 
 **Files:**
-- Create: `docs/phase2-findings.md`
+- Create: `../findings.md`
 
 **Interfaces:** none (experiment + documentation).
 
@@ -506,14 +508,14 @@ uv run python -m probe.phase2_baseline \
 ```
 Expected: full K=1–16 curve. (This step is a real API run; if a key is unavailable, the K=1–8 curve from Step 2 stands as the interim baseline.)
 
-- [ ] **Step 4: Write `docs/phase2-findings.md`**
+- [ ] **Step 4: Write `../findings.md`**
 
 Capture: the K-curve table (coverage@K, mean_speedup@K overall + per bucket); the **with-LLVM vs without** reading (best-of-1 oracle-verified vs best-of-K lift; and that without the oracle there is no *trustworthy* output); the baseline number TTRL must beat; and the standing caveats (small/trivial corpus, mca-as-proxy, loop-free scope). Use the actual numbers from Steps 2–3.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/phase2-findings.md
+git add ../findings.md
 git commit -m "docs(phase2): best-of-K baseline findings + the number TTRL must beat
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"

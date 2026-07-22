@@ -1,8 +1,10 @@
 # Phase 1 · Part B — Model Capability Probe
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N) — see [README.md](README.md).
+
 > **Shared sync doc.** Both teammates' Claude sessions read this file to stay aligned.
 > This is **Part B (Model Capability Probe)**. Person A's Part A doc lives alongside it as
-> `docs/phase1-partA-plan.md`.
+> `partA-plan.md`.
 >
 > **For Person A's session:** the sections you care about are **Shared interface**,
 > **Workstream A responsibilities (what B needs from you)**, and **Go/no-go (both halves)**.
@@ -90,8 +92,8 @@ stubs, A should deliver, in priority order:
 A's own deliverable (per the brief) is the verdict-rate / median-verification-time table per
 bucket — that's the *other* half of the go/no-go and is independent of B's code.
 
-**Sync mechanism:** both sessions read the committed `docs/phase1-partB-plan.md` (and
-`docs/phase1-partA-plan.md`). When A changes the schema or a CLI's output shape, update the doc
+**Sync mechanism:** both sessions read the committed `partB-plan.md` (and
+`partA-plan.md`). When A changes the schema or a CLI's output shape, update the doc
 in the same commit so B's session picks it up on next read.
 
 ---
@@ -112,8 +114,8 @@ T3RL-LLVM/
   .gitignore                   # .venv/, results/, __pycache__/, *.ll scratch, data/corpus/*
   .python-version              # pin (3.12)
   docs/
-    phase1-partB-plan.md       # this file
-    phase1-partA-plan.md       # Person A's doc (they own it)
+    partB-plan.md       # this file
+    partA-plan.md       # Person A's doc (they own it)
   data/
     bootstrap/                 # ~50 hand-picked functions (Alive2 test cases) as JSONL
     corpus/                    # drop-in for Person A's real corpus JSONL (git-ignored)
@@ -202,11 +204,11 @@ Classification pipeline for a single rewrite:
   format B is the default carrier for the rest of Phase 1.
 
 ### Step 3 — `solve@K` experiment (the headline number)
-- For each function: sample **K = 8–16** rewrites at **temperature 0.8–1.0**, classify each via
+- For each function: sample **N = 8–16** rewrites at **temperature 0.8–1.0**, classify each via
   the outcome pipeline.
 - Report per size bucket (≤20, 20–50, 50–150 IR instrs) and by loop presence:
-  - **`solve@K`** = fraction of functions with ≥1 `verified_faster` rewrite. *(primary metric)*
-  - **Outcome distribution** = mean fraction of the K rewrites in each label. *(reward sparsity)*
+  - **`solve@K`** = fraction of functions with ≥1 `verified_faster` rewrite (reported at K=N). *(primary metric)*
+  - **Outcome distribution** = mean fraction of the N rewrites in each label. *(reward sparsity)*
   - Wall-clock per function (sampling + verification) for later RL-loop cost estimation.
 
 ### Step 4 — Cheap prompt ablations
@@ -219,7 +221,7 @@ Classification pipeline for a single rewrite:
   `llvm-mca`.
 - Re-run Steps 3–4 on the real corpus. No changes above the verifier/perf boundary.
 - **DONE for perf:** `McaPerf` implemented; perf-scorer sanity check run (see
-  `docs/perf-scorer-findings.md`). Key result: `llvm-mca --iterations=1` ranks -O0 slower than -O3
+  `perf-scorer-findings.md`). Key result: `llvm-mca --iterations=1` ranks -O0 slower than -O3
   on **98% of loop-free** functions but only **69% of loops** — so the mca reward is trustworthy on
   loop-free code and unreliable on loops (same bias as Alive2). This reinforces targeting the
   **loop-free buckets** for the go/no-go. Verifier swap still pending Person A's CLI.

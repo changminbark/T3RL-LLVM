@@ -1,7 +1,9 @@
 # Phase 1 · Part A — Verifier & Corpus Feasibility — Design
 
+> Terminology: **N** = rewrites sampled per function (the pool), **K** = selection budget (K ≤ N). Note: code snippets below keep the source's local param names `n`/`k`. See [../README.md](../README.md).
+
 > **Status:** approved design, pre-implementation.
-> **Companion docs:** `docs/phase1-partA-plan.md` (master brief), `docs/phase1-partB-plan.md`
+> **Companion docs:** `../partA-plan.md` (master brief), `../partB-plan.md`
 > (Chang Min's Part B, already implemented — the frozen interface contract).
 
 ## Context
@@ -171,5 +173,5 @@ exception.** `alive-tv` absent → `Verdict(error)`; `llvm-extract` absent → w
 - [ ] `verify_corpus.py` driver emitting `results/verdict_rates.{json,txt}`.
 - [ ] `perf_sanity.py`.
 - [ ] Offline test suite for all of the above; B's suite still green.
-- [ ] Short note in `docs/phase1-partA-plan.md` or the shared doc confirming the `alive-harness`
+- [ ] Short note in `../partA-plan.md` or the shared doc confirming the `alive-harness`
       CLI contract matches what B calls.

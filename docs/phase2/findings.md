@@ -3,15 +3,18 @@
 **Date:** 2026-07-19 · **Model:** `deepseek-v4-pro` (Fireworks) · **Oracle:** Alive2 v21 + LLVM 21 ·
 **Corpus:** 64 clean single functions (`corpus21`, llvm@21-compiled, O0+O3+mca baselines).
 
+> Terminology: N = rewrites sampled per function (the pool), K = selection budget (K ≤ N) — see
+> [README.md](README.md).
+
 ## What this is
 
-Phase 2 establishes the **non-TTRL baseline**: sample K rewrites per function, keep the
+Phase 2 establishes the **non-TTRL baseline**: sample N rewrites per function, keep the
 Alive2-**verified** ones, select the **fastest** by llvm-mca, and measure the achieved speedup over
 the compiler's `-O3`. This is the number a Phase 3 TTRL loop must beat, and — per the master plan —
 "the pipeline becomes the RL reward function unchanged." It is also the **first measurement of LLVM
 *improving* the result** (via selection), not merely grading it.
 
-Metrics (unbiased estimators over all C(n,k) subsets, not "first k"):
+Metrics (unbiased estimators over all C(N,K) subsets, not "first K"):
 - **Coverage@K** = fraction of functions whose best-of-K beats `-O3` (has a verified-faster rewrite).
 - **MeanSpeedup@K** = mean achieved speedup over `-O3`, `max(1.0, best verified speedup)` per
   function (you keep `-O3` when the model can't beat it).
@@ -35,12 +38,12 @@ well-defined headroom for TTRL to beat by making the base model itself produce m
 rewrites, rather than the baseline running away with more samples.
 
 ### Per bucket (K=8)
-- **≤20 loop-free** (n=42): coverage 11.9%, speedup 1.03× — the hard, common case; small straight-line
+- **≤20 loop-free** (42 fns): coverage 11.9%, speedup 1.03× — the hard, common case; small straight-line
   functions leave little for the model to improve over `-O3`.
-- **20–50 loops** (n=12): coverage 75%, speedup 2.02× — the model shines on small loops (these are
+- **20–50 loops** (12 fns): coverage 75%, speedup 2.02× — the model shines on small loops (these are
   simple counted loops Alive2 can also verify).
-- **≤20 loops** (n=3): coverage 33%, speedup 4.5× — few functions, but large wins when found.
-- **50–150 loop-free** (n=1): 0% — one function, no improvement found.
+- **≤20 loops** (3 fns): coverage 33%, speedup 4.5× — few functions, but large wins when found.
+- **50–150 loop-free** (1 fn): 0% — one function, no improvement found.
 
 The gains concentrate where there's headroom (loops, larger bodies); tiny loop-free functions are
 mostly already optimal at `-O3`.
@@ -70,24 +73,24 @@ worth the training cost; the curve here is the yardstick.
 
 Regenerate with `uv run --with matplotlib --with numpy python scripts/make_plots.py`.
 
-- **Best-of-K baseline** — `docs/figures/plot1_bestofk_curve.png` (coverage + mean speedup vs K;
+- **Best-of-K baseline** — `figures/plot1_bestofk_curve.png` (coverage + mean speedup vs K;
   the "LLVM as a tool" result: best-of-1 → best-of-16 ~doubles coverage, curve saturates).
-- **SLM vs LLM prior** — `docs/figures/plot2_slm_vs_llm.png` (capability resonance; SLM fails on IR
-  syntax, LLM has a real un-gamed prior).
-- **Coverage by bucket** — `docs/figures/plot3_coverage_by_bucket.png` (where the headroom is).
+- **SLM vs LLM prior** — `../phase1/figures/plot2_slm_vs_llm.png` (a Phase 1 capability result:
+  SLM fails on IR syntax, LLM has a real un-gamed prior).
+- **Coverage by bucket** — `figures/plot3_coverage_by_bucket.png` (where the headroom is).
 
-- **Base model vs base + LLVM** — `docs/figures/plot4_base_vs_llm_tool.png` (the direct answer:
-  base alone ships 0% *trustworthy* speedups since it can't verify; the oracle adds *trust* at k=1
-  then *selection* to k=16 → 28.1%).
+- **Base model vs base + LLVM** — `figures/plot4_base_vs_llm_tool.png` (the direct answer:
+  base alone ships 0% *trustworthy* speedups since it can't verify; the oracle adds *trust* at K=1
+  then *selection* to K=16 → 28.1%).
 
 ![base vs base+LLVM](figures/plot4_base_vs_llm_tool.png)
 ![best-of-K baseline](figures/plot1_bestofk_curve.png)
-![SLM vs LLM](figures/plot2_slm_vs_llm.png)
+![SLM vs LLM](../phase1/figures/plot2_slm_vs_llm.png)
 ![coverage by bucket](figures/plot3_coverage_by_bucket.png)
 
 ## Caveats (carried from Phase 1)
 
-- **Small, trivial corpus** (64 functions, several buckets n=1). Directional, not final — a
+- **Small, trivial corpus** (64 functions, several buckets with a single function). Directional, not final — a
   calibrated realistic corpus (loopy/larger, on a Linux box) would firm these numbers.
 - **llvm-mca is a proxy** for speed (reliable loop-free, weaker on loops; cycles ≠ wall-clock).
   A speed-metric validation vs real timing is the recommended next hardening — a reviewer-critical

@@ -7,7 +7,7 @@ gameable grader — the compiler infrastructure is the labeler.
 
 This repo currently holds **Phase 1, Part B — the model capability probe**: an inference-only
 experiment measuring whether an accessible base model has a nonzero prior on the task (the ability
-TTRL would amplify). See [`docs/phase1-partB-plan.md`](docs/phase1-partB-plan.md) for the full plan
+TTRL would amplify). See [`docs/phase1/partB-plan.md`](docs/phase1/partB-plan.md) for the full plan
 and the shared interface with Part A (verifier & corpus).
 
 ## Quickstart
@@ -35,7 +35,7 @@ toolchain**, the **Alive2 oracle**, and a **model backend**. Ordered runbook:
 # 0. Python env
 uv sync --extra dev
 
-# 1-2. Alive2 oracle + LLVM 21 toolchain (~15 min, no from-source LLVM). Full guide: docs/alive2-build.md
+# 1-2. Alive2 oracle + LLVM 21 toolchain (~15 min, no from-source LLVM). Full guide: docs/phase1/alive2-build.md
 git submodule update --init --recursive
 ./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-alive2.sh
 source scripts/alive2/env.sh            # exports ALIVE_TV (oracle) + LLVM_BIN (llvm@21 for clang/llc/llvm-mca)
@@ -96,7 +96,7 @@ Person A's `data/corpus/` (git-ignored) is the source of truth for the real runs
 
 The `stub` verifier only recognizes trivially-equal IR; `stub` perf uses an instruction-count
 proxy. Once LLVM tools and the Alive2 harness are installed (build Alive2 with
-[`docs/alive2-build.md`](docs/alive2-build.md); `--verifier alive` shells out to `alive-harness`,
+[`docs/phase1/alive2-build.md`](docs/phase1/alive2-build.md); `--verifier alive` shells out to `alive-harness`,
 which finds `alive-tv` via `$ALIVE_TV`), swap them in with no other code changes:
 
 ```bash
@@ -111,7 +111,7 @@ with `LLVM_BIN=/path/to/llvm/bin` and the target triple with `PROBE_TARGET` (def
 `aarch64-linux-gnu`, chosen so llvm-mca doesn't choke on macOS asm directives).
 
 **Caveat — `llvm-mca` is only a reliable speed proxy for loop-free functions (98%), not loops
-(69%).** We run it at `--iterations=1`; see [`docs/perf-scorer-findings.md`](docs/perf-scorer-findings.md)
+(69%).** We run it at `--iterations=1`; see [`docs/phase1/perf-scorer-findings.md`](docs/phase1/perf-scorer-findings.md)
 for the measurements and why.
 
 ## Key details

@@ -53,10 +53,15 @@ class Verdict(BaseModel):
 
 
 class PerfScore(BaseModel):
-    """Performance score for a single IR module. mca_cycles is primary; code_size secondary."""
+    """Performance score for a single IR module.
 
-    mca_cycles: float
+    Scorers fill the field matching their metric: mca/stub set `mca_cycles`, timing sets `wall_ns`.
+    The scorer's `cost()` picks which one the reward compares on. `code_size_bytes` is secondary.
+    """
+
+    mca_cycles: float = 0.0
     code_size_bytes: int = 0
+    wall_ns: float | None = None
 
 
 class GenFormat(str, Enum):

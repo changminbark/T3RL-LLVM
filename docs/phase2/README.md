@@ -33,9 +33,17 @@ Figures: [`figures/plot1_bestofk_curve.png`](figures/plot1_bestofk_curve.png) (t
 [`plot4_base_vs_llm_tool.png`](figures/plot4_base_vs_llm_tool.png).
 
 **Caveat:** the whole signal rides on llvm-mca cycles (reliable loop-free, weaker on loops; cycles ≠
-wall-clock) — a real-timing validation is the recommended next hardening.
+wall-clock). Now validated against real wall-clock — see below.
+
+## Hardening — real timing ([timing-validation.md](timing-validation.md))
+
+`TimingPerf` (`--perf timing`) measures real per-call nanoseconds on the native host. Audit result:
+wall-clock ranks -O0/-O3 correctly **100%** vs mca's **90.6%** (Spearman 0.51) — mca is a
+directionally-useful but loose proxy, wrong mostly on loops. Use `--perf timing` when a number must
+survive review.
 
 ## Contents
 
 - [`findings.md`](findings.md) — full results, per-bucket tables, reproduce commands.
+- [`timing-validation.md`](timing-validation.md) — mca-vs-wall-clock audit + the `--perf timing` scorer.
 - [`plans/`](plans/) · [`specs/`](specs/) — best-of-K implementation design records.

@@ -108,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="provider ignores `n`; sample K completions via K sequential calls")
     p.add_argument("--format", default="ir", choices=["ir", "c"])
     p.add_argument("--verifier", default="stub", choices=["stub", "alive"])
-    p.add_argument("--perf", default="stub", choices=["stub", "mca"])
+    p.add_argument("--perf", default="stub", choices=["stub", "mca", "timing"])
     p.add_argument("--k", type=int, default=8)
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--max-tokens", dest="max_tokens", type=int, default=2048)

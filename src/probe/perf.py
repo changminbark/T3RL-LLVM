@@ -13,13 +13,21 @@ import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .schema import PerfScore
+from .schema import CorpusRecord, PerfScore
 from .tools import TARGET_TRIPLE, find_tool
 
 
 class PerfScorer(ABC):
     @abstractmethod
     def score(self, ir: str) -> PerfScore | None: ...
+
+    def cost(self, score: PerfScore) -> float:
+        """The comparison metric (lower = faster). mca/stub use cycles; timing overrides to ns."""
+        return score.mca_cycles
+
+    def cached_baseline(self, record: CorpusRecord) -> float | None:
+        """A precomputed -O3 cost from the corpus, if it's in this scorer's units. None = re-score."""
+        return None
 
 
 def _count_instructions(ir: str) -> int:
@@ -66,6 +74,9 @@ class McaPerf(PerfScorer):
     def available(self) -> bool:
         return self.llc is not None and self.mca is not None
 
+    def cached_baseline(self, record: CorpusRecord) -> float | None:
+        return record.mca_cycles_o3  # corpus stores O3 cycles in mca units
+
     def score(self, ir: str) -> PerfScore | None:
         if not self.available():
             return None
@@ -107,4 +118,8 @@ def make_perf(kind: str) -> PerfScorer:
         return StubPerf()
     if kind == "mca":
         return McaPerf()
+    if kind == "timing":
+        from .timing import TimingPerf  # lazy: timing.py imports PerfScorer from here
+
+        return TimingPerf()
     raise ValueError(f"unknown perf kind: {kind!r}")

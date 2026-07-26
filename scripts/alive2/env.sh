@@ -5,7 +5,14 @@
 # We pin to LLVM 21 because the alive2 submodule is at its v21.0 release tag. This is a
 # reproducible released combo (alive2 v21.0 + llvm 21) — do NOT bump one without the other.
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+# Resolve this script's path when sourced, in both bash and zsh. In zsh ${BASH_SOURCE} is empty,
+# so fall back to zsh's %N (via eval so bash never parses the zsh-only syntax).
+if [ -n "${ZSH_VERSION:-}" ]; then
+  eval 'SELF=${(%):-%x}'   # %x = file of the current line (the sourced script)
+else
+  SELF="${BASH_SOURCE[0]:-$0}"
+fi
+REPO_ROOT="$(cd "$(dirname "$SELF")/../.." && pwd -P)"
 
 # Locate LLVM 21: Homebrew keg (macOS) or apt install path (Linux). Override with LLVM21_PREFIX.
 if [ -z "${LLVM21_PREFIX:-}" ]; then

@@ -93,9 +93,13 @@ Regenerate with `uv run --with matplotlib --with numpy python scripts/make_plots
 - **Small, trivial corpus** (64 functions, several buckets with a single function). Directional, not final — a
   calibrated realistic corpus (loopy/larger, on a Linux box) would firm these numbers.
 - **llvm-mca is a proxy** for speed (reliable loop-free, weaker on loops; cycles ≠ wall-clock).
-  A speed-metric validation vs real timing is the recommended next hardening — a reviewer-critical
-  point for any paper.
-- **Format-A (raw IR) only**, one frontier model. The K-curve is deepseek-specific.
+  Now validated against real wall-clock — mca ranks -O0/-O3 correctly 90.6% vs timing's 100%,
+  Spearman 0.51. See [timing-validation.md](timing-validation.md); `--perf timing` drives selection
+  on real time when needed.
+- **Format-A (raw IR) only**, one frontier model. The K-curve is deepseek-specific. Raw-IR
+  generation is bottlenecked by *parseability* — models emit full modules / `...` placeholders that
+  Alive2 rejects; normalizing the IR is what makes the numbers real (see
+  [ir-robustness.md](ir-robustness.md)).
 
 ## Reproduce
 

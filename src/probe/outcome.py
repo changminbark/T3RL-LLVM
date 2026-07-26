@@ -13,6 +13,7 @@ fewer cycles than the *source* is treated as `verified_faster`; otherwise `verif
 from __future__ import annotations
 
 from .extract import extract_code
+from .ir_utils import sanitize_module
 from .lower import lower_c_to_ir
 from .perf import PerfScorer
 from .schema import (
@@ -49,11 +50,12 @@ def classify(
         raw_completion=completion,
     )
 
-    # 1. get IR out of the completion
+    # 1. get IR out of the completion. For format ir, normalize the model's module (inject valid
+    #    target lines, strip attribute-group cruft) so full-module / placeholder output still parses.
     code = extract_code(completion, fmt)
     if code is None:
         return result
-    rewrite_ir = code if fmt is GenFormat.ir else lower_c_to_ir(code)
+    rewrite_ir = sanitize_module(code, record.src_ir) if fmt is GenFormat.ir else lower_c_to_ir(code)
     if not rewrite_ir:
         return result
     result.extracted_ir = rewrite_ir
@@ -66,31 +68,33 @@ def classify(
         result.outcome = _VERDICT_TO_OUTCOME[verdict.status]
         return result
 
-    # 3. proven equivalent -> is it actually faster?
+    # 3. proven equivalent -> is it actually faster? (metric = perf.cost, so timing plugs in here)
     score = perf.score(rewrite_ir)
     if score is None:
         # verified but we cannot measure speed -> treat as no measurable gain
         result.outcome = RewriteOutcome.verified_no_gain
         return result
 
-    result.rewrite_cycles = score.mca_cycles
-    baseline = _baseline_cycles(record, perf)
-    if baseline is not None and score.mca_cycles > 0:
-        result.speedup_vs_o3 = baseline / score.mca_cycles
-    if baseline is not None and score.mca_cycles < baseline:
+    rewrite_cost = perf.cost(score)
+    result.rewrite_cycles = rewrite_cost
+    baseline = _baseline_cost(record, perf)
+    if baseline is not None and rewrite_cost > 0:
+        result.speedup_vs_o3 = baseline / rewrite_cost
+    if baseline is not None and rewrite_cost < baseline:
         result.outcome = RewriteOutcome.verified_faster
     else:
         result.outcome = RewriteOutcome.verified_no_gain
     return result
 
 
-def _baseline_cycles(record: CorpusRecord, perf: PerfScorer) -> float | None:
-    """Cycles to beat: the O3 baseline if known, else the source function under the same scorer."""
-    if record.mca_cycles_o3 is not None:
-        return record.mca_cycles_o3
+def _baseline_cost(record: CorpusRecord, perf: PerfScorer) -> float | None:
+    """Cost to beat under `perf`: its cached -O3 value if any, else re-score O3, else the source."""
+    cached = perf.cached_baseline(record)
+    if cached is not None:
+        return cached
     if record.o3_baseline_ir:
         s = perf.score(record.o3_baseline_ir)
         if s is not None:
-            return s.mca_cycles
+            return perf.cost(s)
     s = perf.score(record.src_ir)
-    return s.mca_cycles if s is not None else None
+    return perf.cost(s) if s is not None else None

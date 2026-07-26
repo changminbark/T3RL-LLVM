@@ -12,8 +12,10 @@ from .schema import CorpusRecord, GenFormat
 _IR_INSTR = (
     "You are an expert LLVM optimizer. Rewrite the given LLVM IR function so it computes "
     "EXACTLY the same result for every input, but runs faster. Preserve the function signature "
-    "and name. Do not change observable behavior. Output ONLY the rewritten LLVM IR in a single "
-    "```llvm code block."
+    "and name. Do not change observable behavior. Output the rewritten LLVM IR in a single "
+    "```llvm code block. Emit COMPLETE, parseable IR — never abbreviate any part with '...'. "
+    "You may omit module boilerplate (target datalayout/triple, attribute groups); just give the "
+    "`define` (plus any `declare`s it needs). Keep prose before the code block brief."
 )
 
 _C_INSTR = (

@@ -111,7 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--perf", default="stub", choices=["stub", "mca", "timing"])
     p.add_argument("--k", type=int, default=8)
     p.add_argument("--temperature", type=float, default=0.9)
-    p.add_argument("--max-tokens", dest="max_tokens", type=int, default=2048)
+    p.add_argument("--max-tokens", dest="max_tokens", type=int, default=8192)
     p.add_argument("--timeout", type=int, default=30, help="verifier timeout (s)")
     p.add_argument("--include-o3", dest="include_o3", action="store_true")
     p.add_argument("--out", default="results")

@@ -60,11 +60,11 @@ class _FixedVerifier(VerifierHarness):
 
 
 class _FakeTiming(PerfScorer):
-    """Returns fixed wall_ns per IR string; O3 baseline = 50 ns."""
-    _NS = {_FAST: 10.0}
+    """10 ns for the 'fast' rewrite, else 50 ns (the O3 baseline). Keys on a substring because
+    classify sanitizes the rewrite IR (injects target lines) before scoring."""
 
     def score(self, ir):
-        return PerfScore(wall_ns=self._NS.get(ir, 50.0))
+        return PerfScore(wall_ns=10.0 if "fast" in ir else 50.0)
 
     def cost(self, score):
         return score.wall_ns

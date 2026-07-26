@@ -13,6 +13,7 @@ fewer cycles than the *source* is treated as `verified_faster`; otherwise `verif
 from __future__ import annotations
 
 from .extract import extract_code
+from .ir_utils import sanitize_module
 from .lower import lower_c_to_ir
 from .perf import PerfScorer
 from .schema import (
@@ -49,11 +50,12 @@ def classify(
         raw_completion=completion,
     )
 
-    # 1. get IR out of the completion
+    # 1. get IR out of the completion. For format ir, normalize the model's module (inject valid
+    #    target lines, strip attribute-group cruft) so full-module / placeholder output still parses.
     code = extract_code(completion, fmt)
     if code is None:
         return result
-    rewrite_ir = code if fmt is GenFormat.ir else lower_c_to_ir(code)
+    rewrite_ir = sanitize_module(code, record.src_ir) if fmt is GenFormat.ir else lower_c_to_ir(code)
     if not rewrite_ir:
         return result
     result.extracted_ir = rewrite_ir

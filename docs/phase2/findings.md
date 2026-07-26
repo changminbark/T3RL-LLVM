@@ -96,7 +96,10 @@ Regenerate with `uv run --with matplotlib --with numpy python scripts/make_plots
   Now validated against real wall-clock — mca ranks -O0/-O3 correctly 90.6% vs timing's 100%,
   Spearman 0.51. See [timing-validation.md](timing-validation.md); `--perf timing` drives selection
   on real time when needed.
-- **Format-A (raw IR) only**, one frontier model. The K-curve is deepseek-specific.
+- **Format-A (raw IR) only**, one frontier model. The K-curve is deepseek-specific. Raw-IR
+  generation is bottlenecked by *parseability* — models emit full modules / `...` placeholders that
+  Alive2 rejects; normalizing the IR is what makes the numbers real (see
+  [ir-robustness.md](ir-robustness.md)).
 
 ## Reproduce
 

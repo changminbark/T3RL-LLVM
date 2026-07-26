@@ -42,8 +42,17 @@ wall-clock ranks -O0/-O3 correctly **100%** vs mca's **90.6%** (Spearman 0.51) �
 directionally-useful but loose proxy, wrong mostly on loops. Use `--perf timing` when a number must
 survive review.
 
+## Hardening — IR robustness ([ir-robustness.md](ir-robustness.md))
+
+A local deepseek run first showed **61% `invalid_syntax`** — the model's raw IR (full modules,
+`...` placeholders, truncation) was unparseable, masking real speedups. Normalizing it
+(`ir_utils.sanitize_module`) + raising `--max-tokens` cut invalids to **10%** and took Coverage@16
+from **11% → 23.4%** (1.18× → 1.39×), matching the reference baseline. Parseability, not model
+ability, was the binding constraint for `--format ir`.
+
 ## Contents
 
 - [`findings.md`](findings.md) — full results, per-bucket tables, reproduce commands.
 - [`timing-validation.md`](timing-validation.md) — mca-vs-wall-clock audit + the `--perf timing` scorer.
+- [`ir-robustness.md`](ir-robustness.md) — recovering `invalid_syntax` (sanitizer + token budget).
 - [`plans/`](plans/) · [`specs/`](specs/) — best-of-K implementation design records.

@@ -119,7 +119,9 @@ wall-clock nanoseconds on the native host (macOS or Linux) — see
 ## Key details
 
 - **Generation formats:** `--format ir` (model emits LLVM IR directly) or `--format c` (model
-  emits C, lowered to IR via `clang`).
+  emits C, lowered to IR via `clang`). Raw IR is normalized (`ir_utils.sanitize_module`) before
+  verification — models emit full modules / `...` placeholders Alive2 would otherwise reject; this
+  alone doubled coverage on a real run (see [`docs/phase2/ir-robustness.md`](docs/phase2/ir-robustness.md)).
 - **Ablation:** `--include-o3` also shows the `-O3` baseline in the prompt as a starting point.
 - **Metrics:** `solve@K` (fraction of functions with ≥1 verified-and-faster rewrite) and the
   per-outcome distribution, reported per size/loop bucket — see `src/probe/metrics.py`.

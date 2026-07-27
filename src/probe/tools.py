@@ -12,6 +12,9 @@ Resolution order for the bin dir:
 
 We also target a non-Darwin triple by default (`$PROBE_TARGET`, default aarch64-linux-gnu) so
 llvm-mca's asm parser does not choke on macOS directives like `.subsections_via_symbols`.
+
+`$PROBE_CPU` (default cortex-a72) sets a specific CPU otherwise llvm-mca defaults
+`-mcpu` to whatever CPU is running it.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import shutil
 from pathlib import Path
 
 TARGET_TRIPLE = os.environ.get("PROBE_TARGET", "aarch64-linux-gnu")
+TARGET_CPU = os.environ.get("PROBE_CPU", "cortex-a72")
 
 _FALLBACK_DIRS = [
     "/opt/homebrew/opt/llvm/bin",  # Homebrew on Apple Silicon

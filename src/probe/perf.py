@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from .schema import CorpusRecord, PerfScore
-from .tools import TARGET_TRIPLE, find_tool
+from .tools import TARGET_CPU, TARGET_TRIPLE, find_tool
 
 
 class PerfScorer(ABC):
@@ -65,8 +65,9 @@ class McaPerf(PerfScorer):
     (static analysis cannot see real trip counts — see docs for the remaining failure modes).
     """
 
-    def __init__(self, triple: str = TARGET_TRIPLE, iterations: int = 1):
+    def __init__(self, triple: str = TARGET_TRIPLE, cpu: str = TARGET_CPU, iterations: int = 1):
         self.triple = triple
+        self.cpu = cpu
         self.iterations = iterations
         self.llc = find_tool("llc")
         self.mca = find_tool("llvm-mca")
@@ -86,13 +87,14 @@ class McaPerf(PerfScorer):
             ll.write_text(ir)
             try:
                 if subprocess.run(
-                    [self.llc, "-mtriple", self.triple, "-o", str(asm), str(ll)],
+                    [self.llc, "-mtriple", self.triple, "-mcpu", self.cpu,
+                     "-o", str(asm), str(ll)],
                     capture_output=True,
                     timeout=30,
                 ).returncode != 0:
                     return None
                 proc = subprocess.run(
-                    [self.mca, "-mtriple", self.triple,
+                    [self.mca, "-mtriple", self.triple, "-mcpu", self.cpu,
                      f"--iterations={self.iterations}", str(asm)],
                     capture_output=True,
                     text=True,

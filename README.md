@@ -1,129 +1,114 @@
 # T3RL-LLVM
 
-Testing the viability of an unsupervised **TTRL superoptimizer**: a model that rewrites LLVM IR
-functions to be provably-equivalent-but-faster, using Alive2 (a theorem-prover-based translation
-validator) as an un-gameable reward oracle and `llvm-mca` as the speed scorer. No labels, no
-gameable grader — the compiler infrastructure is the labeler.
+**A model that teaches itself to out-optimize the compiler — graded by the compiler's own proof
+tools, with no training labels.**
 
-This repo currently holds **Phase 1, Part B — the model capability probe**: an inference-only
-experiment measuring whether an accessible base model has a nonzero prior on the task (the ability
-TTRL would amplify). See [`docs/phase1/partB-plan.md`](docs/phase1/partB-plan.md) for the full plan
-and the shared interface with Part A (verifier & corpus).
+## What it does
 
-## Quickstart
+Compilers (`-O2`/`-O3`) optimize code using a fixed catalog of safe rewrites; a language model can
+search more creatively. So: take a function in **LLVM IR** (the intermediate language C, C++, and
+Rust all compile to) and ask a model to *rewrite it to do exactly the same thing, but faster*. This
+is **superoptimization**.
 
-Requires [uv](https://docs.astral.sh/uv/). Everything runs behind stubs, so no LLVM/Alive2/API key
-is needed to exercise the pipeline end-to-end.
+The catch that normally kills this: grading "exactly the same thing" is hard — tests miss edge
+cases, and labeled data doesn't exist. This project sidesteps that by using **formal compiler tools
+as the grader**, making the reward label-free and very hard to game — which is what unlocks
+unsupervised / test-time RL (TTRL).
+
+## How the reward works
+
+> **reward = (provably correct) × (measurably faster)**
+
+- **Alive2 — the reward oracle (correctness).** A *translation validator*: given the original
+  function and the model's rewrite, it uses a theorem prover to either **prove** they return
+  identical outputs for *every* input, or hand back a concrete input where they differ. A rewrite
+  scores only if Alive2 proves equivalence — no test suite to miss cases, no labels. This blocks the
+  *wrong-but-fast* cheat.
+- **llvm-mca — the speed scorer (magnitude).** It statically models a CPU pipeline to estimate how
+  many **cycles** a code sequence takes. Once Alive2 says "correct," mca says "how much faster,"
+  measured against `-O3`. This blocks the *output-the-input-unchanged* cheat (zero speedup → zero
+  reward).
+
+The two easy ways to fool the grader cancel out: to score, a rewrite must be **both** proven correct
+**and** faster — rare, and hard to fake. (`llvm-mca` is a proxy — accurate loop-free, weaker on
+loops; `--perf timing` measures real wall-clock when a number must survive review.)
+
+## Status
+
+| phase | question | result |
+|---|---|---|
+| **1** — viability | Is the oracle usable? Does the model have a prior? | **GO**, scoped to loop-free — [docs/phase1](docs/phase1/README.md) |
+| **2** — best-of-K baseline | How good is verify-and-select, before any training? | ~**23–28%** of functions beaten past `-O3`, ~**1.4×** mean speedup — [docs/phase2](docs/phase2/README.md) |
+| 3 — TTRL loop · 4 — writeup | Can the model *learn* to beat that baseline? | future |
+
+Docs index + terminology: [docs/README.md](docs/README.md).
+
+## Quickstart (offline — no keys, no LLVM)
+
+Requires [uv](https://docs.astral.sh/uv/). Runs the whole pipeline against stubs:
 
 ```bash
-uv sync --extra dev          # create .venv, install deps (add --extra local for the vLLM backend)
-uv run pytest                # unit tests
-# Full pipeline on the offline mock backend + stub verifier/perf:
-uv run python -m probe.run_probe --corpus data/bootstrap --backend mock --k 8 \
-    --verifier stub --perf stub
+uv sync --extra dev
+uv run pytest
+uv run python -m probe.run_probe --corpus data/bootstrap --backend mock \
+    --k 8 --verifier stub --perf stub
 ```
 
-That prints a bucketed `solve@K` table and writes per-run artifacts to `results/`
-(`*.rewrites.jsonl`, `*.summary.json`, `*.table.txt`).
+Prints a per-bucket `solve@K` table; writes artifacts to `results/` (git-ignored).
 
-## End-to-end (real run)
+## Real run
 
-The offline quickstart above uses stubs. A real run needs three external things: the **LLVM
-toolchain**, the **Alive2 oracle**, and a **model backend**. Ordered runbook:
+Three ingredients: the **Alive2 oracle**, the **LLVM 21 toolchain**, and a **model backend**.
 
 ```bash
-# 0. Python env
-uv sync --extra dev
-
-# 1-2. Alive2 oracle + LLVM 21 toolchain (~15 min, no from-source LLVM). Full guide: docs/phase1/alive2-build.md
+# 1. Build Alive2 + LLVM 21 (~15 min; full guide: docs/phase1/alive2-build.md)
 git submodule update --init --recursive
 ./scripts/alive2/01-prereqs.sh && ./scripts/alive2/02-build-alive2.sh
-source scripts/alive2/env.sh            # exports ALIVE_TV (oracle) + LLVM_BIN (llvm@21 for clang/llc/llvm-mca)
+source scripts/alive2/env.sh          # exports ALIVE_TV + LLVM_BIN (llvm@21)
 
-# 3. Build the real corpus. fetch-corpus.sh shallow-clones llvm-test-suite and prints
-#    its SingleSource path. Run this on the Linux box where you built LLVM/Alive2 — clang
-#    emits IR for aarch64-linux-gnu, which is native there; on macOS, files that include
-#    Linux system headers fail to compile and get skipped.
-uv run python -m probe.build_corpus --src "$(./scripts/fetch-corpus.sh -q)" \
-    --out data/corpus/corpus.jsonl --with-mca --max-functions 800
+# 2. Build a corpus (uses llvm@21 from env.sh, so it matches the oracle)
+uv run python -m probe.build_corpus --src data/c_sources \
+    --out data/corpus/corpus.jsonl --with-mca
 
-# 4. Part A — verifier feasibility (the go/no-go table) + perf sanity
-uv run python -m probe.verify_corpus --corpus data/corpus --timeout 30   # -> results/verdict_rates.{json,txt}
-uv run python -m probe.perf_sanity  --corpus data/corpus --perf mca      # llvm-mca ranks O0 >= O3?
+# 3. Sample K rewrites per function, verify with Alive2, score with mca (Fireworks example)
+export FIREWORKS_API_KEY=...
+uv run python -m probe.run_probe --corpus data/corpus/corpus.jsonl --backend api \
+    --model accounts/fireworks/models/deepseek-v4-pro \
+    --base-url https://api.fireworks.ai/inference/v1 --api-key-env FIREWORKS_API_KEY \
+    --k 16 --verifier alive --perf mca --out results/run1
 
-# 5. Part B — model probe (real solve@K) against the same oracle
-export TOGETHER_API_KEY=...
-uv run python -m probe.run_probe --corpus data/corpus --backend api \
-    --model "Qwen/Qwen2.5-Coder-32B-Instruct" --base-url https://api.together.xyz/v1 \
-    --api-key-env TOGETHER_API_KEY --k 16 --verifier alive --perf mca
+# 4. Best-of-K baseline (Coverage@K / MeanSpeedup@K)
+uv run python -m probe.phase2_baseline --rewrites results/run1 \
+    --corpus data/corpus/corpus.jsonl --ks 1,2,4,8,16
 ```
 
-Steps 1–2 are independent (Alive2 builds its own LLVM) and can run in either order. You get partial
-signal before finishing the slow parts: a model key alone gives Part B's syntactic-validity/format
-numbers (`--verifier stub --perf stub`); adding `brew install llvm` gives real `llvm-mca` scoring;
-only Alive2 unlocks real equivalence verdicts. Details in the sections below.
+**Other backends** (any OpenAI-compatible API): swap `--model` / `--base-url` / `--api-key-env` —
+e.g. Together (`https://api.together.xyz/v1`, `Qwen/Qwen2.5-Coder-32B-Instruct`), OpenAI, OpenRouter.
+Add `--no-supports-n` if the provider ignores `n` (samples K sequentially). Local GPU:
+`--backend vllm --model <hf-id>` (needs `uv sync --extra local`). Presets in `configs/models.yaml`.
 
-## Running against a real model
+**Partial signal without the full stack:** a model key alone (`--verifier stub --perf stub`) gives
+IR-validity numbers; `brew install llvm` adds real `mca` scoring; only Alive2 unlocks real
+equivalence verdicts.
 
-```bash
-# Hosted OpenAI-compatible API (set the key env named by --api-key-env):
-export TOGETHER_API_KEY=...
-uv run python -m probe.run_probe --corpus data/bootstrap --backend api \
-    --model "Qwen/Qwen2.5-Coder-32B-Instruct" --base-url https://api.together.xyz/v1 \
-    --api-key-env TOGETHER_API_KEY --k 16 --temperature 0.9
+## Notes
 
-# Local GPU via vLLM (install the extra first: uv sync --extra local):
-uv run python -m probe.run_probe --corpus data/bootstrap --backend vllm \
-    --model "Qwen/Qwen2.5-Coder-7B-Instruct" --k 16
-```
+- **Real timing instead of mca:** `--perf timing` measures wall-clock ns on the native host (macOS or
+  Linux). Audit mca against it: `uv run python -m probe.timing_validation --corpus <corpus>
+  --rewrites <run>`. See [docs/phase2/timing-validation.md](docs/phase2/timing-validation.md).
+- **Toolchain consistency:** the corpus, `alive-tv`, and mca must all use the same LLVM (source
+  `env.sh` for llvm@21). Apple's system clang emits IR Homebrew's tools reject; `tools.py` resolves
+  everything from one install (`$LLVM_BIN` / `$PROBE_TARGET` to override).
+- **IR is normalized** before verification (`ir_utils.sanitize_module`) — models emit full modules /
+  `...` placeholders Alive2 would reject; this doubled coverage on a real run
+  ([docs/phase2/ir-robustness.md](docs/phase2/ir-robustness.md)).
+- **Terminology:** **N** = rewrites sampled per function (`--k`); **K** = the selection budget in
+  `@K` metrics (K ≤ N). `solve@K` / `Coverage@K` = fraction of functions with ≥1 verified-faster
+  rewrite.
 
-See `configs/models.yaml` for preset backend/sampling combinations.
+## Repo layout
 
-## Building the corpus
-
-`data/bootstrap/seed.jsonl` is generated from single-function C files in `data/c_sources/` using
-the local clang (`-O0` → `src_ir`, `-O3` → `o3_baseline_ir`, with `n_instructions`/`has_loops`
-computed from the IR). Regenerate it after adding C files:
-
-```bash
-uv run python -m probe.build_corpus --src data/c_sources --out data/bootstrap/seed.jsonl
-# add --with-mca to also fill mca_cycles_o3 (requires llvm-mca + llc)
-```
-
-Person A's `data/corpus/` (git-ignored) is the source of truth for the real runs.
-
-## Real verifier & performance scorer
-
-The `stub` verifier only recognizes trivially-equal IR; `stub` perf uses an instruction-count
-proxy. Once LLVM tools and the Alive2 harness are installed (build Alive2 with
-[`docs/phase1/alive2-build.md`](docs/phase1/alive2-build.md); `--verifier alive` shells out to `alive-harness`,
-which finds `alive-tv` via `$ALIVE_TV`), swap them in with no other code changes:
-
-```bash
-uv run python -m probe.run_probe --corpus data/corpus --backend api --model <id> \
-    --k 16 --verifier alive --perf mca
-```
-
-**LLVM toolchain:** `--perf mca` and `--with-mca` need `llc` + `llvm-mca` (e.g. `brew install
-llvm`). All LLVM tools (clang, llc, llvm-mca) must come from the *same* install — on macOS, Apple's
-clang emits IR that Homebrew's tools crash on. `tools.py` auto-resolves the Homebrew keg; override
-with `LLVM_BIN=/path/to/llvm/bin` and the target triple with `PROBE_TARGET` (default
-`aarch64-linux-gnu`, chosen so llvm-mca doesn't choke on macOS asm directives).
-
-**Caveat — `llvm-mca` is only a reliable speed proxy for loop-free functions (98%), not loops
-(69%).** We run it at `--iterations=1`; see [`docs/phase1/perf-scorer-findings.md`](docs/phase1/perf-scorer-findings.md)
-for the measurements and why. For a number that must survive review, `--perf timing` measures real
-wall-clock nanoseconds on the native host (macOS or Linux) — see
-[`docs/phase2/timing-validation.md`](docs/phase2/timing-validation.md).
-
-## Key details
-
-- **Generation formats:** `--format ir` (model emits LLVM IR directly) or `--format c` (model
-  emits C, lowered to IR via `clang`). Raw IR is normalized (`ir_utils.sanitize_module`) before
-  verification — models emit full modules / `...` placeholders Alive2 would otherwise reject; this
-  alone doubled coverage on a real run (see [`docs/phase2/ir-robustness.md`](docs/phase2/ir-robustness.md)).
-- **Ablation:** `--include-o3` also shows the `-O3` baseline in the prompt as a starting point.
-- **Metrics:** `solve@K` (fraction of functions with ≥1 verified-and-faster rewrite) and the
-  per-outcome distribution, reported per size/loop bucket — see `src/probe/metrics.py`.
-- **Layout:** interfaces live in `src/probe/` (backends, verifier, perf, outcome, metrics);
-  corpus schema is the day-one contract with Part A in `src/probe/schema.py`.
+`src/probe/` is the pipeline: `backends/` (mock/api/vllm), `verifier.py` (Alive2), `perf.py` +
+`timing.py` (scorers), `outcome.py` (classify a rewrite), `bestofk.py` + `phase2_baseline.py`
+(metrics), `ir_utils.py` (IR normalization), `build_corpus.py`. The corpus schema — the day-one
+contract between components — is in `schema.py`. Design docs and findings live in `docs/`.

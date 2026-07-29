@@ -51,15 +51,17 @@ from probe.schema import RewriteResult, RewriteOutcome
 
 
 def test_passk_known_values():
-    assert passk_estimator(8, 0, 1) == 0.0          # no successes -> never covered
-    assert passk_estimator(8, 8, 1) == 1.0          # all successes -> always covered
-    assert passk_estimator(4, 1, 2) == pytest.approx(0.5)      # 1 - C(3,2)/C(4,2) = 1 - 3/6
-    assert passk_estimator(4, 2, 2) == pytest.approx(5 / 6)    # 1 - C(2,2)/C(4,2) = 1 - 1/6
+    assert passk_estimator(8, 0, 1) == 0.0  # no successes -> never covered
+    assert passk_estimator(8, 8, 1) == 1.0  # all successes -> always covered
+    assert passk_estimator(4, 1, 2) == pytest.approx(0.5)  # 1 - C(3,2)/C(4,2) = 1 - 3/6
+    assert passk_estimator(4, 2, 2) == pytest.approx(
+        5 / 6
+    )  # 1 - C(2,2)/C(4,2) = 1 - 1/6
 
 
 def test_passk_k_ge_available_nonsuccess():
     # If k covers more than the non-successes, coverage is certain.
-    assert passk_estimator(4, 2, 3) == 1.0          # any 3 of 4 must include a success
+    assert passk_estimator(4, 2, 3) == 1.0  # any 3 of 4 must include a success
 
 
 def test_expected_best_speedup_two_samples():
@@ -191,9 +193,7 @@ from probe.bestofk import curve
 
 
 def _recs_for(fid, outcomes_speedups):
-    return [
-        _rec_named(fid, i, o, s) for i, (o, s) in enumerate(outcomes_speedups)
-    ]
+    return [_rec_named(fid, i, o, s) for i, (o, s) in enumerate(outcomes_speedups)]
 
 
 def _rec_named(fid, idx, outcome, speedup):
@@ -318,9 +318,18 @@ from probe.schema import RewriteResult, RewriteOutcome, CorpusRecord
 def test_load_rewrites_groups_by_function(tmp_path):
     p = tmp_path / "a.rewrites.jsonl"
     rows = [
-        RewriteResult(function_id="f1", sample_index=0, outcome=RewriteOutcome.verified_faster, speedup_vs_o3=1.5),
-        RewriteResult(function_id="f1", sample_index=1, outcome=RewriteOutcome.invalid_syntax),
-        RewriteResult(function_id="f2", sample_index=0, outcome=RewriteOutcome.verified_no_gain),
+        RewriteResult(
+            function_id="f1",
+            sample_index=0,
+            outcome=RewriteOutcome.verified_faster,
+            speedup_vs_o3=1.5,
+        ),
+        RewriteResult(
+            function_id="f1", sample_index=1, outcome=RewriteOutcome.invalid_syntax
+        ),
+        RewriteResult(
+            function_id="f2", sample_index=0, outcome=RewriteOutcome.verified_no_gain
+        ),
     ]
     p.write_text("\n".join(r.model_dump_json() for r in rows) + "\n")
     grouped = load_rewrites(p)
@@ -329,8 +338,10 @@ def test_load_rewrites_groups_by_function(tmp_path):
 
 
 def test_format_curve_has_headers():
-    result = {"overall": {1: {"coverage": 0.25, "mean_speedup": 1.25, "n_functions": 2}},
-              "by_bucket": {}}
+    result = {
+        "overall": {1: {"coverage": 0.25, "mean_speedup": 1.25, "n_functions": 2}},
+        "by_bucket": {},
+    }
     text = format_curve(result)
     assert "K" in text and "coverage" in text.lower() and "speedup" in text.lower()
 
@@ -340,15 +351,40 @@ def test_main_end_to_end(tmp_path):
     rw = tmp_path / "run"
     rw.mkdir()
     rows = [
-        RewriteResult(function_id="f1", sample_index=0, outcome=RewriteOutcome.verified_faster, speedup_vs_o3=2.0),
-        RewriteResult(function_id="f1", sample_index=1, outcome=RewriteOutcome.verified_no_gain),
+        RewriteResult(
+            function_id="f1",
+            sample_index=0,
+            outcome=RewriteOutcome.verified_faster,
+            speedup_vs_o3=2.0,
+        ),
+        RewriteResult(
+            function_id="f1", sample_index=1, outcome=RewriteOutcome.verified_no_gain
+        ),
     ]
-    (rw / "x.rewrites.jsonl").write_text("\n".join(r.model_dump_json() for r in rows) + "\n")
+    (rw / "x.rewrites.jsonl").write_text(
+        "\n".join(r.model_dump_json() for r in rows) + "\n"
+    )
     # corpus (for buckets)
     corpus = tmp_path / "corpus.jsonl"
-    corpus.write_text(CorpusRecord(function_id="f1", src_ir="x", n_instructions=5, has_loops=False).model_dump_json() + "\n")
+    corpus.write_text(
+        CorpusRecord(
+            function_id="f1", src_ir="x", n_instructions=5, has_loops=False
+        ).model_dump_json()
+        + "\n"
+    )
     out = tmp_path / "out"
-    rc = main(["--rewrites", str(rw), "--corpus", str(corpus), "--ks", "1,2", "--out", str(out)])
+    rc = main(
+        [
+            "--rewrites",
+            str(rw),
+            "--corpus",
+            str(corpus),
+            "--ks",
+            "1,2",
+            "--out",
+            str(out),
+        ]
+    )
     assert rc == 0
     data = json.loads((out / "phase2_baseline.json").read_text())
     assert data["curve"]["overall"]["1"]["n_functions"] == 1
@@ -400,7 +436,10 @@ def load_rewrites(path: Path) -> dict[str, list[RewriteResult]]:
 
 def format_curve(result: dict) -> str:
     def block(title: str, per_k: dict) -> list[str]:
-        lines = [title, f"  {'K':>3}  {'coverage':>9}  {'mean_speedup':>13}  {'n_fns':>6}"]
+        lines = [
+            title,
+            f"  {'K':>3}  {'coverage':>9}  {'mean_speedup':>13}  {'n_fns':>6}",
+        ]
         for k in sorted(per_k, key=int):
             c = per_k[k]
             lines.append(
@@ -432,7 +471,9 @@ def run(args) -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "phase2_baseline.json").write_text(json.dumps({"ks": ks, "curve": result}, indent=2))
+    (out / "phase2_baseline.json").write_text(
+        json.dumps({"ks": ks, "curve": result}, indent=2)
+    )
     (out / "phase2_baseline.txt").write_text(text + "\n")
     print(f"wrote {out}/phase2_baseline.json and .txt")
 
@@ -440,7 +481,9 @@ def run(args) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Phase 2 best-of-K baseline")
     p.add_argument("--rewrites", required=True, help="run dir or *.rewrites.jsonl file")
-    p.add_argument("--corpus", required=True, help="corpus JSONL (for size/loop buckets)")
+    p.add_argument(
+        "--corpus", required=True, help="corpus JSONL (for size/loop buckets)"
+    )
     p.add_argument("--ks", default="1,2,4,8,16", help="comma-separated K values")
     p.add_argument("--out", default="results", help="output dir")
     return p

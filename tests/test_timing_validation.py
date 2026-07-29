@@ -36,16 +36,28 @@ class _MapTiming(PerfScorer):
 
 def test_rewrite_audit_confirms_and_correlates():
     o3 = "O3"
-    rec = CorpusRecord(function_id="f", src_ir="SRC", o3_baseline_ir=o3, n_instructions=1)
+    rec = CorpusRecord(
+        function_id="f", src_ir="SRC", o3_baseline_ir=o3, n_instructions=1
+    )
     # two verified_faster rewrites: one really faster (5 ns < 50), one actually slower (80 > 50)
-    rf = RewriteResult(function_id="f", sample_index=0, outcome=RewriteOutcome.verified_faster,
-                       speedup_vs_o3=10.0, extracted_ir="FAST")
-    rs = RewriteResult(function_id="f", sample_index=1, outcome=RewriteOutcome.verified_faster,
-                       speedup_vs_o3=1.2, extracted_ir="SLOW")
+    rf = RewriteResult(
+        function_id="f",
+        sample_index=0,
+        outcome=RewriteOutcome.verified_faster,
+        speedup_vs_o3=10.0,
+        extracted_ir="FAST",
+    )
+    rs = RewriteResult(
+        function_id="f",
+        sample_index=1,
+        outcome=RewriteOutcome.verified_faster,
+        speedup_vs_o3=1.2,
+        extracted_ir="SLOW",
+    )
     timing = _MapTiming({o3: 50.0, "FAST": 5.0, "SLOW": 80.0})
     out = rewrite_audit({"f": [rf, rs]}, {"f": rec}, timing)
     assert out["verified_faster_timed"] == 2
-    assert out["also_faster_by_wall_clock"] == 1          # only FAST beats O3 by wall-clock
+    assert out["also_faster_by_wall_clock"] == 1  # only FAST beats O3 by wall-clock
     assert abs(out["fraction_confirmed"] - 0.5) < 1e-9
     # mca speedups (10, 1.2) rank-agree with wall speedups (50/5=10, 50/80<1) -> +1.0
     assert abs(out["spearman_mca_vs_wall_speedup"] - 1.0) < 1e-9

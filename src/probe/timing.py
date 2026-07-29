@@ -52,14 +52,22 @@ def _split_top_level(params: str) -> list[str]:
         elif c == ")":
             depth -= 1
         elif c == "," and depth == 0:
-            out.append(params[start:i]); start = i + 1
+            out.append(params[start:i])
+            start = i + 1
     tail = params[start:]
     if tail.strip():
         out.append(tail)
     return out
 
+
 # IR integer type -> C type (via <stdint.h>). i1 is a bool in the C ABI.
-_INT_C = {"i1": "_Bool", "i8": "int8_t", "i16": "int16_t", "i32": "int32_t", "i64": "int64_t"}
+_INT_C = {
+    "i1": "_Bool",
+    "i8": "int8_t",
+    "i16": "int16_t",
+    "i32": "int32_t",
+    "i64": "int64_t",
+}
 
 # Benchmark shape (bounds chosen so 2D index patterns like m[i*n+i] stay in-bounds: LEN*LEN < ARR_N).
 _ARR_N = 8192
@@ -110,9 +118,11 @@ def parse_signature(ir: str) -> Signature | None:
                 tok = p.strip().split()[0]  # leading type token, ignoring attrs/name
                 c = _c_type(tok)
                 if c == "PTR":
-                    kinds.append("ptr"); cparams.append("int32_t*")
+                    kinds.append("ptr")
+                    cparams.append("int32_t*")
                 else:
-                    kinds.append("int"); cparams.append(c)
+                    kinds.append("int")
+                    cparams.append(c)
     except (_Unsupported, IndexError):
         return None
     return Signature(name=name, ret=ret, params=kinds, param_c=cparams)
@@ -120,8 +130,11 @@ def parse_signature(ir: str) -> Signature | None:
 
 def normalize_ir(ir: str) -> str:
     """Drop the module's target lines so host clang retargets to the native machine."""
-    keep = [ln for ln in ir.splitlines()
-            if not ln.lstrip().startswith(("target datalayout", "target triple"))]
+    keep = [
+        ln
+        for ln in ir.splitlines()
+        if not ln.lstrip().startswith(("target datalayout", "target triple"))
+    ]
     return "\n".join(keep)
 
 
@@ -145,7 +158,9 @@ def render_driver(sig: Signature, seed: int) -> str:
             args.append(v)
             scalar_i += 1
     call = f"{sig.name}({', '.join(args)})"
-    fold = f"sink += (int64_t){call};" if sig.ret != "void" else f"{call}; sink += arr[0];"
+    fold = (
+        f"sink += (int64_t){call};" if sig.ret != "void" else f"{call}; sink += arr[0];"
+    )
     extern_params = ", ".join(sig.param_c) if sig.param_c else "void"
 
     return f"""#include <stdint.h>
@@ -217,14 +232,33 @@ class TimingPerf(PerfScorer):
             obj, exe = d / "mod.o", d / "bench"
             try:
                 # Compile IR -> host object (default target), then link with the driver.
-                if subprocess.run([self.clang, "-O2", "-x", "ir", "-c", str(d / "mod.ll"),
-                                   "-o", str(obj)], capture_output=True, timeout=60).returncode:
+                if subprocess.run(
+                    [
+                        self.clang,
+                        "-O2",
+                        "-x",
+                        "ir",
+                        "-c",
+                        str(d / "mod.ll"),
+                        "-o",
+                        str(obj),
+                    ],
+                    capture_output=True,
+                    timeout=60,
+                ).returncode:
                     return None
-                if subprocess.run([self.clang, "-O2", str(d / "drv.c"), str(obj), "-o", str(exe)],
-                                  capture_output=True, timeout=60).returncode:
+                if subprocess.run(
+                    [self.clang, "-O2", str(d / "drv.c"), str(obj), "-o", str(exe)],
+                    capture_output=True,
+                    timeout=60,
+                ).returncode:
                     return None
-                proc = subprocess.run([str(exe)], capture_output=True, text=True,
-                                      timeout=self.run_timeout_s)
+                proc = subprocess.run(
+                    [str(exe)],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.run_timeout_s,
+                )
             except (subprocess.TimeoutExpired, OSError):
                 return None
             if proc.returncode != 0:
@@ -235,7 +269,9 @@ class TimingPerf(PerfScorer):
                 return None
             if ns <= 0:
                 ns = 1e-3
-            return PerfScore(mca_cycles=0.0, code_size_bytes=obj.stat().st_size, wall_ns=ns)
+            return PerfScore(
+                mca_cycles=0.0, code_size_bytes=obj.stat().st_size, wall_ns=ns
+            )
 
     def cost(self, score: PerfScore) -> float:
         return score.wall_ns if score.wall_ns is not None else score.mca_cycles

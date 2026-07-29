@@ -12,9 +12,7 @@ from .schema import CorpusRecord, RewriteOutcome, RewriteResult
 _ALL_OUTCOMES = list(RewriteOutcome)
 
 
-def summarize(
-    records: dict[str, CorpusRecord], results: list[RewriteResult]
-) -> dict:
+def summarize(records: dict[str, CorpusRecord], results: list[RewriteResult]) -> dict:
     """Return a nested summary: per bucket -> {solve_at_k, n_functions, outcome_distribution}."""
     by_fn: dict[str, list[RewriteResult]] = defaultdict(list)
     for r in results:
@@ -59,9 +57,14 @@ def format_table(summary: dict) -> str:
     for bucket, s in summary.items():
         dist = s["outcome_distribution"]
         top = ", ".join(
-            f"{o}={dist[o]:.2f}" for o in (
-                "verified_faster", "verified_no_gain", "counterexample",
-                "invalid_syntax", "timeout", "unsupported",
+            f"{o}={dist[o]:.2f}"
+            for o in (
+                "verified_faster",
+                "verified_no_gain",
+                "counterexample",
+                "invalid_syntax",
+                "timeout",
+                "unsupported",
             )
         )
         lines.append(

@@ -218,7 +218,9 @@ def _run_alive(alive_tv: str, src: Path, tgt: Path, timeout_s: int) -> Verdict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Alive2 equivalence-check wrapper -> Verdict JSON")
+    p = argparse.ArgumentParser(
+        description="Alive2 equivalence-check wrapper -> Verdict JSON"
+    )
     p.add_argument("src", help="source .ll file")
     p.add_argument("tgt", help="target .ll file")
     p.add_argument("--timeout", type=int, default=30, help="hard wall timeout (s)")
@@ -279,7 +281,9 @@ from probe.schema import VerdictStatus
 def _write_fake_alive_tv(dir_path: Path, body: str) -> Path:
     """A fake alive-tv that ignores its args and prints `body` to stdout."""
     script = dir_path / "alive-tv"
-    script.write_text(f"#!/usr/bin/env python3\nimport sys\nsys.stdout.write({body!r})\n")
+    script.write_text(
+        f"#!/usr/bin/env python3\nimport sys\nsys.stdout.write({body!r})\n"
+    )
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
@@ -294,16 +298,15 @@ def test_roundtrip_through_alivecliverifier(tmp_path, monkeypatch):
     # Invoke the real alive-harness CLI via a wrapper script AliveCliVerifier can exec.
     harness = tmp_path / "alive-harness"
     harness.write_text(
-        "#!/usr/bin/env bash\n"
-        f'exec {sys.executable} -m probe.alive_harness "$@"\n'
+        f'#!/usr/bin/env bash\nexec {sys.executable} -m probe.alive_harness "$@"\n'
     )
     harness.chmod(harness.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    monkeypatch.setenv(
-        "PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src")
-    )
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src"))
 
     verifier = AliveCliVerifier(cli_cmd=str(harness))
-    verdict = verifier.check("define i32 @f() {\n ret i32 0\n}", "define i32 @f() {\n ret i32 0\n}")
+    verdict = verifier.check(
+        "define i32 @f() {\n ret i32 0\n}", "define i32 @f() {\n ret i32 0\n}"
+    )
     assert verdict.status is VerdictStatus.verified
 ```
 
@@ -587,7 +590,11 @@ def _rec(fid, n, loops, has_o3=True):
 
 
 def test_aggregate_rate_and_median():
-    records = [_rec("a", 5, False), _rec("b", 6, False), _rec("c", 7, False, has_o3=False)]
+    records = [
+        _rec("a", 5, False),
+        _rec("b", 6, False),
+        _rec("c", 7, False, has_o3=False),
+    ]
     verdicts = {
         "a": Verdict(status=VerdictStatus.verified, wall_time_s=2.0),
         "b": Verdict(status=VerdictStatus.timeout, wall_time_s=4.0),
@@ -604,7 +611,9 @@ def test_aggregate_rate_and_median():
 
 
 def test_format_table_is_stringy():
-    table = aggregate([_rec("a", 5, False)], {"a": Verdict(status=VerdictStatus.verified)})
+    table = aggregate(
+        [_rec("a", 5, False)], {"a": Verdict(status=VerdictStatus.verified)}
+    )
     text = format_table(table)
     assert "<=20" in text
     assert "verified_rate" in text or "rate" in text.lower()
@@ -877,7 +886,9 @@ def run(args) -> None:
     perf = make_perf(args.perf)
     out = check_monotonic(records, perf)
     if out["checked"] == 0:
-        print("no measurable (O0, O3) pairs — is llvm-mca/llc installed and are O3 baselines present?")
+        print(
+            "no measurable (O0, O3) pairs — is llvm-mca/llc installed and are O3 baselines present?"
+        )
     else:
         print(
             f"monotonic (O0>=O3) on {out['held']}/{out['checked']} = {out['fraction']:.2f}"
@@ -888,7 +899,9 @@ def run(args) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Part A: perf scorer monotonicity sanity-check")
+    p = argparse.ArgumentParser(
+        description="Part A: perf scorer monotonicity sanity-check"
+    )
     p.add_argument("--corpus", required=True, help="JSONL file or dir of *.jsonl")
     p.add_argument("--perf", default="mca", choices=["stub", "mca"])
     return p

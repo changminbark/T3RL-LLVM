@@ -91,6 +91,7 @@ def test_mixed_output_is_conservative_counterexample():
     )
     from probe.alive_harness import classify_alive_output
     from probe.schema import VerdictStatus
+
     v = classify_alive_output(mixed, "", 0, False)
     assert v.status is VerdictStatus.counterexample
 
@@ -108,7 +109,9 @@ from probe.schema import VerdictStatus
 def _write_fake_alive_tv(dir_path: Path, body: str) -> Path:
     """A fake alive-tv that ignores its args and prints `body` to stdout."""
     script = dir_path / "alive-tv"
-    script.write_text(f"#!/usr/bin/env python3\nimport sys\nsys.stdout.write({body!r})\n")
+    script.write_text(
+        f"#!/usr/bin/env python3\nimport sys\nsys.stdout.write({body!r})\n"
+    )
     script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
     return script
 
@@ -123,14 +126,13 @@ def test_roundtrip_through_alivecliverifier(tmp_path, monkeypatch):
     # Invoke the real alive-harness CLI via a wrapper script AliveCliVerifier can exec.
     harness = tmp_path / "alive-harness"
     harness.write_text(
-        "#!/usr/bin/env bash\n"
-        f'exec {sys.executable} -m probe.alive_harness "$@"\n'
+        f'#!/usr/bin/env bash\nexec {sys.executable} -m probe.alive_harness "$@"\n'
     )
     harness.chmod(harness.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
-    monkeypatch.setenv(
-        "PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src")
-    )
+    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).resolve().parents[1] / "src"))
 
     verifier = AliveCliVerifier(cli_cmd=str(harness))
-    verdict = verifier.check("define i32 @f() {\n ret i32 0\n}", "define i32 @f() {\n ret i32 0\n}")
+    verdict = verifier.check(
+        "define i32 @f() {\n ret i32 0\n}", "define i32 @f() {\n ret i32 0\n}"
+    )
     assert verdict.status is VerdictStatus.verified

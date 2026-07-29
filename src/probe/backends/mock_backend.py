@@ -19,7 +19,9 @@ class MockBackend(LLMBackend):
     def __init__(self, lang: str = "llvm"):
         self.lang = lang
 
-    def generate(self, prompt: str, k: int, temperature: float, max_tokens: int) -> list[str]:
+    def generate(
+        self, prompt: str, k: int, temperature: float, max_tokens: int
+    ) -> list[str]:
         m = _FIRST_BLOCK.search(prompt)
         body = m.group(1).strip() if m else "define i32 @f() {\n  ret i32 0\n}"
         completion = f"```{self.lang}\n{body}\n```"

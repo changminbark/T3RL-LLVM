@@ -34,7 +34,10 @@ def load_rewrites(path: Path) -> dict[str, list[RewriteResult]]:
 
 def format_curve(result: dict) -> str:
     def block(title: str, per_k: dict) -> list[str]:
-        lines = [title, f"  {'K':>3}  {'coverage':>9}  {'mean_speedup':>13}  {'n_fns':>6}"]
+        lines = [
+            title,
+            f"  {'K':>3}  {'coverage':>9}  {'mean_speedup':>13}  {'n_fns':>6}",
+        ]
         for k in sorted(per_k, key=int):
             c = per_k[k]
             lines.append(
@@ -66,7 +69,9 @@ def run(args) -> None:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "phase2_baseline.json").write_text(json.dumps({"ks": ks, "curve": result}, indent=2))
+    (out / "phase2_baseline.json").write_text(
+        json.dumps({"ks": ks, "curve": result}, indent=2)
+    )
     (out / "phase2_baseline.txt").write_text(text + "\n")
     print(f"wrote {out}/phase2_baseline.json and .txt")
 
@@ -74,7 +79,9 @@ def run(args) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Phase 2 best-of-K baseline")
     p.add_argument("--rewrites", required=True, help="run dir or *.rewrites.jsonl file")
-    p.add_argument("--corpus", required=True, help="corpus JSONL (for size/loop buckets)")
+    p.add_argument(
+        "--corpus", required=True, help="corpus JSONL (for size/loop buckets)"
+    )
     p.add_argument("--ks", default="1,2,4,8,16", help="comma-separated K values")
     p.add_argument("--out", default="results", help="output dir")
     return p

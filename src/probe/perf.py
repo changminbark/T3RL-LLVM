@@ -86,16 +86,34 @@ class McaPerf(PerfScorer):
             asm = Path(td) / "mod.s"
             ll.write_text(ir)
             try:
-                if subprocess.run(
-                    [self.llc, "-mtriple", self.triple, "-mcpu", self.cpu,
-                     "-o", str(asm), str(ll)],
-                    capture_output=True,
-                    timeout=30,
-                ).returncode != 0:
+                if (
+                    subprocess.run(
+                        [
+                            self.llc,
+                            "-mtriple",
+                            self.triple,
+                            "-mcpu",
+                            self.cpu,
+                            "-o",
+                            str(asm),
+                            str(ll),
+                        ],
+                        capture_output=True,
+                        timeout=30,
+                    ).returncode
+                    != 0
+                ):
                     return None
                 proc = subprocess.run(
-                    [self.mca, "-mtriple", self.triple, "-mcpu", self.cpu,
-                     f"--iterations={self.iterations}", str(asm)],
+                    [
+                        self.mca,
+                        "-mtriple",
+                        self.triple,
+                        "-mcpu",
+                        self.cpu,
+                        f"--iterations={self.iterations}",
+                        str(asm),
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=30,

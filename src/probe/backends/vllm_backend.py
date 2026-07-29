@@ -15,10 +15,14 @@ class VllmBackend(LLMBackend):
             ) from e
         from vllm import LLM
 
-        self._SamplingParams = __import__("vllm", fromlist=["SamplingParams"]).SamplingParams
+        self._SamplingParams = __import__(
+            "vllm", fromlist=["SamplingParams"]
+        ).SamplingParams
         self.llm = LLM(model=model, dtype=dtype, **engine_kwargs)
 
-    def generate(self, prompt: str, k: int, temperature: float, max_tokens: int) -> list[str]:
+    def generate(
+        self, prompt: str, k: int, temperature: float, max_tokens: int
+    ) -> list[str]:
         params = self._SamplingParams(
             n=k, temperature=temperature, max_tokens=max_tokens
         )

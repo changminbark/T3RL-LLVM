@@ -65,7 +65,9 @@ class McaPerf(PerfScorer):
     (static analysis cannot see real trip counts — see docs for the remaining failure modes).
     """
 
-    def __init__(self, triple: str = TARGET_TRIPLE, cpu: str = TARGET_CPU, iterations: int = 1):
+    def __init__(
+        self, triple: str = TARGET_TRIPLE, cpu: str = TARGET_CPU, iterations: int = 1
+    ):
         self.triple = triple
         self.cpu = cpu
         self.iterations = iterations

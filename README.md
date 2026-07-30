@@ -98,7 +98,9 @@ equivalence verdicts.
   --rewrites <run>`. See [docs/phase2/timing-validation.md](docs/phase2/timing-validation.md).
 - **Toolchain consistency:** the corpus, `alive-tv`, and mca must all use the same LLVM (source
   `env.sh` for llvm@21). Apple's system clang emits IR Homebrew's tools reject; `tools.py` resolves
-  everything from one install (`$LLVM_BIN` / `$PROBE_TARGET` to override).
+  everything from one install (`$LLVM_BIN` / `$PROBE_TARGET` to override). The oracle toolchain costs
+  ~5.4 GB on disk; to reclaim it see
+  [Uninstalling](docs/phase1/alive2-build.md#uninstalling-reclaiming-54-gb).
 - **IR is normalized** before verification (`ir_utils.sanitize_module`) — models emit full modules /
   `...` placeholders Alive2 would reject; this doubled coverage on a real run
   ([docs/phase2/ir-robustness.md](docs/phase2/ir-robustness.md)).

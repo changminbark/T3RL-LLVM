@@ -43,5 +43,6 @@ whole-function comparisons).
 - [`partA-plan.md`](partA-plan.md) · [`partA-findings.md`](partA-findings.md) — verifier/corpus.
 - [`partB-plan.md`](partB-plan.md) — model capability probe.
 - [`perf-scorer-findings.md`](perf-scorer-findings.md) — llvm-mca as a speed proxy.
-- [`alive2-build.md`](alive2-build.md) — building the `alive-tv` oracle (also used by Phase 2).
+- [`alive2-build.md`](alive2-build.md) — building the `alive-tv` oracle (also used by Phase 2), and
+  uninstalling it.
 - [`plans/`](plans/) · [`specs/`](specs/) — Part A implementation design records.

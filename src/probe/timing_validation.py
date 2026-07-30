@@ -87,7 +87,9 @@ def corpus_audit(records: list[CorpusRecord], mca, timing: TimingPerf) -> dict:
 
 
 def rewrite_audit(
-    grouped: dict[str, list[RewriteResult]], by_id: dict[str, CorpusRecord], timing: TimingPerf
+    grouped: dict[str, list[RewriteResult]],
+    by_id: dict[str, CorpusRecord],
+    timing: TimingPerf,
 ) -> dict:
     total = faster_by_wall = 0
     mca_speedups: list[float] = []
@@ -126,15 +128,30 @@ def format_report(corpus: dict, rewrites: dict | None) -> str:
         v = c[k]
         L.append(f"  {k:22} {v:.1%}" if v is not None else f"  {k:22} n/a")
     s = c["spearman_mca_vs_ns"]
-    L.append(f"  spearman(mca, ns):     {s:.3f}" if s is not None else "  spearman(mca, ns):     n/a")
+    L.append(
+        f"  spearman(mca, ns):     {s:.3f}"
+        if s is not None
+        else "  spearman(mca, ns):     n/a"
+    )
     if rewrites is not None:
         r = rewrites
-        L += ["", "Rewrite audit (mca-`verified_faster` rewrites):",
-              f"  timed:                 {r['verified_faster_timed']}",
-              f"  also faster by wall:   {r['also_faster_by_wall_clock']}"]
+        L += [
+            "",
+            "Rewrite audit (mca-`verified_faster` rewrites):",
+            f"  timed:                 {r['verified_faster_timed']}",
+            f"  also faster by wall:   {r['also_faster_by_wall_clock']}",
+        ]
         fc, sp = r["fraction_confirmed"], r["spearman_mca_vs_wall_speedup"]
-        L.append(f"  fraction confirmed:    {fc:.1%}" if fc is not None else "  fraction confirmed:    n/a")
-        L.append(f"  spearman(mca,wall Δ):  {sp:.3f}" if sp is not None else "  spearman(mca,wall Δ):  n/a")
+        L.append(
+            f"  fraction confirmed:    {fc:.1%}"
+            if fc is not None
+            else "  fraction confirmed:    n/a"
+        )
+        L.append(
+            f"  spearman(mca,wall Δ):  {sp:.3f}"
+            if sp is not None
+            else "  spearman(mca,wall Δ):  n/a"
+        )
     return "\n".join(L)
 
 
@@ -161,9 +178,13 @@ def run(args) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Audit llvm-mca against real wall-clock timing")
+    p = argparse.ArgumentParser(
+        description="Audit llvm-mca against real wall-clock timing"
+    )
     p.add_argument("--corpus", required=True, help="corpus JSONL file or dir")
-    p.add_argument("--rewrites", help="optional run dir / rewrites.jsonl to audit verified_faster")
+    p.add_argument(
+        "--rewrites", help="optional run dir / rewrites.jsonl to audit verified_faster"
+    )
     p.add_argument("--out", default="results")
     return p
 

@@ -71,7 +71,9 @@ def run(args) -> None:
         )
         for i, completion in enumerate(completions):
             results.append(
-                classify(rec, completion, i, fmt, verifier, perf, timeout_s=args.timeout)
+                classify(
+                    rec, completion, i, fmt, verifier, perf, timeout_s=args.timeout
+                )
             )
 
     summary = summarize(records, results)
@@ -104,8 +106,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", dest="base_url", default="https://api.openai.com/v1")
     p.add_argument("--api-key-env", dest="api_key_env", default="OPENAI_API_KEY")
     # Some OpenAI-compatible servers (e.g. Ollama) ignore `n`; loop K sequential requests instead.
-    p.add_argument("--no-supports-n", dest="supports_n", action="store_false",
-                   help="provider ignores `n`; sample K completions via K sequential calls")
+    p.add_argument(
+        "--no-supports-n",
+        dest="supports_n",
+        action="store_false",
+        help="provider ignores `n`; sample K completions via K sequential calls",
+    )
     p.add_argument("--format", default="ir", choices=["ir", "c"])
     p.add_argument("--verifier", default="stub", choices=["stub", "alive"])
     p.add_argument("--perf", default="stub", choices=["stub", "mca", "timing"])

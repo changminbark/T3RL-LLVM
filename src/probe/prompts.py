@@ -37,7 +37,14 @@ def build_prompt(
     instr = _IR_INSTR if fmt is GenFormat.ir else _C_INSTR
     lang = "llvm" if fmt is GenFormat.ir else "c"
 
-    parts = [instr, "", "Original function (-O0):", f"```{lang}", record.src_ir.strip(), "```"]
+    parts = [
+        instr,
+        "",
+        "Original function (-O0):",
+        f"```{lang}",
+        record.src_ir.strip(),
+        "```",
+    ]
 
     if include_o3 and record.o3_baseline_ir:
         parts += [

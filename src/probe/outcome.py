@@ -55,7 +55,11 @@ def classify(
     code = extract_code(completion, fmt)
     if code is None:
         return result
-    rewrite_ir = sanitize_module(code, record.src_ir) if fmt is GenFormat.ir else lower_c_to_ir(code)
+    rewrite_ir = (
+        sanitize_module(code, record.src_ir)
+        if fmt is GenFormat.ir
+        else lower_c_to_ir(code)
+    )
     if not rewrite_ir:
         return result
     result.extracted_ir = rewrite_ir

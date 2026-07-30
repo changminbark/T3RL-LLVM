@@ -38,7 +38,9 @@ class ApiBackend(LLMBackend):
             timeout=timeout_s,
         )
 
-    def generate(self, prompt: str, k: int, temperature: float, max_tokens: int) -> list[str]:
+    def generate(
+        self, prompt: str, k: int, temperature: float, max_tokens: int
+    ) -> list[str]:
         if self.supports_n:
             return self._one_request(prompt, k, temperature, max_tokens)
         out: list[str] = []
@@ -46,7 +48,9 @@ class ApiBackend(LLMBackend):
             out.extend(self._one_request(prompt, 1, temperature, max_tokens))
         return out
 
-    def _one_request(self, prompt: str, n: int, temperature: float, max_tokens: int) -> list[str]:
+    def _one_request(
+        self, prompt: str, n: int, temperature: float, max_tokens: int
+    ) -> list[str]:
         """Return n completions. On persistent failure return n empty strings rather than raising,
         so a single slow/failed call degrades to `invalid_syntax` samples instead of killing the run.
         """
@@ -66,7 +70,9 @@ class ApiBackend(LLMBackend):
                 return [c["message"]["content"] for c in resp.json()["choices"]]
             except (httpx.HTTPError, KeyError, ValueError) as e:
                 if attempt == self.retries:
-                    print(f"  [api] giving up after {attempt + 1} attempts: {type(e).__name__}: {e}")
+                    print(
+                        f"  [api] giving up after {attempt + 1} attempts: {type(e).__name__}: {e}"
+                    )
                     return [""] * n
                 time.sleep(2 * (attempt + 1))
         return [""] * n

@@ -46,7 +46,16 @@ def _clang_ir(c_path: Path, opt: str) -> str | None:
         return None
     try:
         proc = subprocess.run(
-            [_CLANG, f"--target={TARGET_TRIPLE}", opt, "-emit-llvm", "-S", "-o", "-", str(c_path)],
+            [
+                _CLANG,
+                f"--target={TARGET_TRIPLE}",
+                opt,
+                "-emit-llvm",
+                "-S",
+                "-o",
+                "-",
+                str(c_path),
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -204,10 +213,14 @@ def build_record(c_path: Path, mca: McaPerf | None) -> CorpusRecord | None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="Build corpus JSONL from C sources via clang")
+    p = argparse.ArgumentParser(
+        description="Build corpus JSONL from C sources via clang"
+    )
     p.add_argument("--src", required=True, help="dir of single-function *.c files")
     p.add_argument("--out", required=True, help="output JSONL path")
-    p.add_argument("--with-mca", action="store_true", help="fill mca_cycles_o3 via llvm-mca")
+    p.add_argument(
+        "--with-mca", action="store_true", help="fill mca_cycles_o3 via llvm-mca"
+    )
     p.add_argument("--max-functions", type=int, default=None, help="cap total records")
     args = p.parse_args()
 

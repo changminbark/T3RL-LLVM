@@ -1,6 +1,14 @@
 from pathlib import Path
 
-from probe.build_corpus import count_instructions, has_loops, _function_name, list_defined_functions, _norm_hash, bucket_histogram, _function_id
+from probe.build_corpus import (
+    count_instructions,
+    has_loops,
+    _function_name,
+    list_defined_functions,
+    _norm_hash,
+    bucket_histogram,
+    _function_id,
+)
 from probe.schema import CorpusRecord
 
 LOOP_IR = """define i32 @sum(i32 %n) {

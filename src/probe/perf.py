@@ -65,7 +65,9 @@ class McaPerf(PerfScorer):
     (static analysis cannot see real trip counts — see docs for the remaining failure modes).
     """
 
-    def __init__(self, triple: str = TARGET_TRIPLE, cpu: str = TARGET_CPU, iterations: int = 1):
+    def __init__(
+        self, triple: str = TARGET_TRIPLE, cpu: str = TARGET_CPU, iterations: int = 1
+    ):
         self.triple = triple
         self.cpu = cpu
         self.iterations = iterations
@@ -86,16 +88,34 @@ class McaPerf(PerfScorer):
             asm = Path(td) / "mod.s"
             ll.write_text(ir)
             try:
-                if subprocess.run(
-                    [self.llc, "-mtriple", self.triple, "-mcpu", self.cpu,
-                     "-o", str(asm), str(ll)],
-                    capture_output=True,
-                    timeout=30,
-                ).returncode != 0:
+                if (
+                    subprocess.run(
+                        [
+                            self.llc,
+                            "-mtriple",
+                            self.triple,
+                            "-mcpu",
+                            self.cpu,
+                            "-o",
+                            str(asm),
+                            str(ll),
+                        ],
+                        capture_output=True,
+                        timeout=30,
+                    ).returncode
+                    != 0
+                ):
                     return None
                 proc = subprocess.run(
-                    [self.mca, "-mtriple", self.triple, "-mcpu", self.cpu,
-                     f"--iterations={self.iterations}", str(asm)],
+                    [
+                        self.mca,
+                        "-mtriple",
+                        self.triple,
+                        "-mcpu",
+                        self.cpu,
+                        f"--iterations={self.iterations}",
+                        str(asm),
+                    ],
                     capture_output=True,
                     text=True,
                     timeout=30,

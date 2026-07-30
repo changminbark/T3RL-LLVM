@@ -30,8 +30,16 @@ def lower_c_to_ir(c_source: str, timeout_s: int = 20) -> str | None:
         src.write_text(c_source)
         try:
             proc = subprocess.run(
-                [_CLANG, f"--target={TARGET_TRIPLE}", "-O0", "-emit-llvm", "-S",
-                 "-o", str(out), str(src)],
+                [
+                    _CLANG,
+                    f"--target={TARGET_TRIPLE}",
+                    "-O0",
+                    "-emit-llvm",
+                    "-S",
+                    "-o",
+                    str(out),
+                    str(src),
+                ],
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,

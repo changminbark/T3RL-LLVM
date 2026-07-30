@@ -5,7 +5,9 @@ import pytest
 from probe.perf import McaPerf
 
 _MCA = McaPerf()
-requires_mca = pytest.mark.skipif(not _MCA.available(), reason="llc/llvm-mca not installed")
+requires_mca = pytest.mark.skipif(
+    not _MCA.available(), reason="llc/llvm-mca not installed"
+)
 
 # Same function at -O0 (stack-heavy) and -O3 (returns the argument): O0 must score more cycles.
 O0_IR = """define i32 @f(i32 %x) {

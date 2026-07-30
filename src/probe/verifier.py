@@ -77,7 +77,8 @@ class AliveCliVerifier(VerifierHarness):
                 )
             except subprocess.TimeoutExpired:
                 return Verdict(
-                    status=VerdictStatus.timeout, wall_time_s=time.perf_counter() - start
+                    status=VerdictStatus.timeout,
+                    wall_time_s=time.perf_counter() - start,
                 )
             except OSError as e:
                 return Verdict(

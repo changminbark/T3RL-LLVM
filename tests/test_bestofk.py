@@ -11,15 +11,17 @@ from probe.schema import RewriteResult, RewriteOutcome
 
 
 def test_passk_known_values():
-    assert passk_estimator(8, 0, 1) == 0.0          # no successes -> never covered
-    assert passk_estimator(8, 8, 1) == 1.0          # all successes -> always covered
-    assert passk_estimator(4, 1, 2) == pytest.approx(0.5)      # 1 - C(3,2)/C(4,2) = 1 - 3/6
-    assert passk_estimator(4, 2, 2) == pytest.approx(5 / 6)    # 1 - C(2,2)/C(4,2) = 1 - 1/6
+    assert passk_estimator(8, 0, 1) == 0.0  # no successes -> never covered
+    assert passk_estimator(8, 8, 1) == 1.0  # all successes -> always covered
+    assert passk_estimator(4, 1, 2) == pytest.approx(0.5)  # 1 - C(3,2)/C(4,2) = 1 - 3/6
+    assert passk_estimator(4, 2, 2) == pytest.approx(
+        5 / 6
+    )  # 1 - C(2,2)/C(4,2) = 1 - 1/6
 
 
 def test_passk_k_ge_available_nonsuccess():
     # If k covers more than the non-successes, coverage is certain.
-    assert passk_estimator(4, 2, 3) == 1.0          # any 3 of 4 must include a success
+    assert passk_estimator(4, 2, 3) == 1.0  # any 3 of 4 must include a success
 
 
 def test_expected_best_speedup_two_samples():
@@ -49,9 +51,7 @@ def test_per_function_speedups_mapping():
 
 
 def _recs_for(fid, outcomes_speedups):
-    return [
-        _rec_named(fid, i, o, s) for i, (o, s) in enumerate(outcomes_speedups)
-    ]
+    return [_rec_named(fid, i, o, s) for i, (o, s) in enumerate(outcomes_speedups)]
 
 
 def _rec_named(fid, idx, outcome, speedup):

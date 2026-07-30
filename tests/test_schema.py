@@ -10,7 +10,19 @@ def test_corpus_record_roundtrip():
 
 
 def test_size_buckets():
-    assert CorpusRecord(function_id="a", src_ir="x", n_instructions=10).size_bucket() == "<=20"
-    assert CorpusRecord(function_id="b", src_ir="x", n_instructions=30).size_bucket() == "20-50"
-    assert CorpusRecord(function_id="c", src_ir="x", n_instructions=100).size_bucket() == "50-150"
-    assert CorpusRecord(function_id="d", src_ir="x", n_instructions=500).size_bucket() == ">150"
+    assert (
+        CorpusRecord(function_id="a", src_ir="x", n_instructions=10).size_bucket()
+        == "<=20"
+    )
+    assert (
+        CorpusRecord(function_id="b", src_ir="x", n_instructions=30).size_bucket()
+        == "20-50"
+    )
+    assert (
+        CorpusRecord(function_id="c", src_ir="x", n_instructions=100).size_bucket()
+        == "50-150"
+    )
+    assert (
+        CorpusRecord(function_id="d", src_ir="x", n_instructions=500).size_bucket()
+        == ">150"
+    )

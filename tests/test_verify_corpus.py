@@ -13,7 +13,11 @@ def _rec(fid, n, loops, has_o3=True):
 
 
 def test_aggregate_rate_and_median():
-    records = [_rec("a", 5, False), _rec("b", 6, False), _rec("c", 7, False, has_o3=False)]
+    records = [
+        _rec("a", 5, False),
+        _rec("b", 6, False),
+        _rec("c", 7, False, has_o3=False),
+    ]
     verdicts = {
         "a": Verdict(status=VerdictStatus.verified, wall_time_s=2.0),
         "b": Verdict(status=VerdictStatus.timeout, wall_time_s=4.0),
@@ -30,7 +34,9 @@ def test_aggregate_rate_and_median():
 
 
 def test_format_table_is_stringy():
-    table = aggregate([_rec("a", 5, False)], {"a": Verdict(status=VerdictStatus.verified)})
+    table = aggregate(
+        [_rec("a", 5, False)], {"a": Verdict(status=VerdictStatus.verified)}
+    )
     text = format_table(table)
     assert "<=20" in text
     assert "verified_rate" in text or "rate" in text.lower()

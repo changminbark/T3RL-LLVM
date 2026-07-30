@@ -45,7 +45,9 @@ def run(args) -> None:
     perf = make_perf(args.perf)
     out = check_monotonic(records, perf)
     if out["checked"] == 0:
-        print("no measurable (O0, O3) pairs — is llvm-mca/llc installed and are O3 baselines present?")
+        print(
+            "no measurable (O0, O3) pairs — is llvm-mca/llc installed and are O3 baselines present?"
+        )
     else:
         print(
             f"monotonic (O0>=O3) on {out['held']}/{out['checked']} = {out['fraction']:.2f}"
@@ -56,7 +58,9 @@ def run(args) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Part A: perf scorer monotonicity sanity-check")
+    p = argparse.ArgumentParser(
+        description="Part A: perf scorer monotonicity sanity-check"
+    )
     p.add_argument("--corpus", required=True, help="JSONL file or dir of *.jsonl")
     p.add_argument("--perf", default="mca", choices=["stub", "mca"])
     return p

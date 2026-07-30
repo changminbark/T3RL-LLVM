@@ -146,8 +146,9 @@ T3RL-LLVM/
 ```python
 class LLMBackend(ABC):
     @abstractmethod
-    def generate(self, prompt: str, k: int, temperature: float,
-                 max_tokens: int) -> list[str]: ...
+    def generate(
+        self, prompt: str, k: int, temperature: float, max_tokens: int
+    ) -> list[str]: ...
 ```
 
 Selected by `configs/models.yaml`; `run_probe.py` never imports a concrete backend directly

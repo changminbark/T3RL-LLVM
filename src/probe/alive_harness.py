@@ -86,7 +86,9 @@ def _run_alive(alive_tv: str, src: Path, tgt: Path, timeout_s: int) -> Verdict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Alive2 equivalence-check wrapper -> Verdict JSON")
+    p = argparse.ArgumentParser(
+        description="Alive2 equivalence-check wrapper -> Verdict JSON"
+    )
     p.add_argument("src", help="source .ll file")
     p.add_argument("tgt", help="target .ll file")
     p.add_argument("--timeout", type=int, default=30, help="hard wall timeout (s)")

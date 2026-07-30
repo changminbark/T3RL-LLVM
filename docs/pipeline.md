@@ -68,3 +68,30 @@ flowchart TD
         BK --> CURVE["Coverage@K · MeanSpeedup@K<br/>~23–28% / ~1.4× over -O3"]
     end
 ```
+
+## Phase 3 — TTRL loop (planned)
+
+Same reward box, now closed into a GRPO+LoRA loop. The dashed line is the network boundary: Fireworks
+holds the policy, our Debian VM holds the oracle. Plan: [phase3/README.md](phase3/README.md).
+
+```mermaid
+flowchart LR
+    subgraph FW["Fireworks RFT (GPU)"]
+        POL["policy (LoRA)"] --> ROLL["sample G rollouts"]
+        UPD["GRPO update"] --> POL
+    end
+
+    subgraph VM["Debian VM (CPU) — env server /init"]
+        RW["reward box, unchanged<br/>sanitize → alive-tv → llvm-mca"]
+        CACHE[("verdict cache<br/>(src,tgt) hash")]
+        RW <--> CACHE
+        RW --> SC["reward ∈ [0,1]<br/>0 unless proven; 1 − 1/speedup"]
+    end
+
+    ROLL -.->|"POST /init"| RW
+    SC -.->|"rollout_finished(reward)"| UPD
+    SC --> DYN["flip rates · mode collapse<br/>adapted-vs-base @ equal K"]
+```
+
+**The oracle is the bottleneck, not the GPU** — Z3 can hold a step for minutes, which is why the
+verdict cache and a bounded worker pool are prerequisites rather than optimizations.

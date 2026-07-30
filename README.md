@@ -39,7 +39,8 @@ loops; `--perf timing` measures real wall-clock when a number must survive revie
 |---|---|---|
 | **1** — viability | Is the oracle usable? Does the model have a prior? | **GO**, scoped to loop-free — [docs/phase1](docs/phase1/README.md) |
 | **2** — best-of-K baseline | How good is verify-and-select, before any training? | ~**23–28%** of functions beaten past `-O3`, ~**1.4×** mean speedup — [docs/phase2](docs/phase2/README.md) |
-| 3 — TTRL loop · 4 — writeup | Can the model *learn* to beat that baseline? | future |
+| **3** — TTRL loop | Can the model *learn* to beat that baseline? | planned — [docs/phase3](docs/phase3/README.md) |
+| 4 — writeup | | future |
 
 Docs index + terminology: [docs/README.md](docs/README.md).
 

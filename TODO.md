@@ -10,19 +10,45 @@ the actual claim (a model that *learns* to beat that baseline). Ordered roughly 
 > critical path — do those first. Start with the `qwen3-8b` baseline in that doc: if a <16B model has
 > no prior, GRPO has no gradient and nothing else here matters.
 
+**The LLVM run box** (corpus build, Alive2, mca, timing): Debian, **14 threads / 14 GB RAM / 4 GB swap
+/ 1.3 TB disk** (8 GB VRAM — unused; the policy lives on Fireworks). Everything in this file that
+touches LLVM must fit that envelope. The two limits that actually bind:
+
+- **RAM, not cores.** Z3 can take 1–2 GB+ per `alive-tv`; **cap parallelism at ~6 workers**, memory-
+  limited. Touching the 4 GB swap turns proofs into `timeout` verdicts *silently* — that corrupts the
+  reward signal, so it must fail loudly instead (§7).
+- **Set `PROBE_TARGET` to the VM's real arch** (`uname -m` → `x86_64-linux-gnu` or `aarch64-linux-gnu`).
+  It defaults to `aarch64-linux-gnu` — a *macOS* workaround (`tools.py:23`) — and `mca_cycles_o3` is
+  computed at that triple (`perf.py:68`), so a wrong target silently models the wrong CPU. It is part
+  of the corpus's identity: **record it, and never compare mca numbers across targets.**
+
+Disk is a non-issue (LLVM+Alive2 ~5.4 GB, llvm-test-suite clone ~1 GB, corpus tens of MB).
+
 ## 1. Bigger, loop-rich, realistic corpus  ← highest priority · **[P3-blocking]**
 
 The current corpora are small and skew tiny/loop-free (64 functions; several buckets have n=1), so the
 numbers are directional, not benchmark-grade.
 
-- [ ] Build the real corpus on the **Debian VM** (native linux-gnu, no header-skip): the
-      llvm-test-suite path via `./scripts/fetch-corpus.sh` → `build_corpus --max-functions 800+`.
-      GRPO over 64 functions with n=1 buckets will just memorize, so this gates Phase 3.
-- [ ] Add **real-world code**: functions mined from permissively-licensed GitHub C/C++/Rust repos, not
-      just the test-suite (distribution TTRL would actually be deployed on).
+Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.md)):
+
+- [ ] **Toolchain first.** `01-prereqs.sh` → `02-build-alive2.sh` → `source scripts/alive2/env.sh`;
+      verify `alive-tv --version` and `$LLVM_BIN/llvm-mca --version`. Export `PROBE_TARGET` (above).
+- [ ] **Build the whole thing, uncapped.** `./scripts/fetch-corpus.sh -q` → `build_corpus --with-mca`
+      **without** `--max-functions`. Rationale below — the cap is not a sampling strategy. Expect most
+      of llvm-test-suite/SingleSource to fail `clang` standalone (missing harness headers); those are
+      skipped silently, which is fine, but **log the skip rate** so we know the yield.
+- [ ] **Then subsample to a balanced corpus.** `--max-functions` truncates in `sorted(rglob("*.c"))`
+      order and returns early (`build_corpus.py:180`), so it yields the alphabetically-first N — the
+      *opposite* of the balance we want. Needs a new step: build full → stratify by
+      `(size_bucket, has_loops)` → sample per stratum. **This is the missing tool for the next bullet.**
 - [ ] **Balance the buckets** — deliberately oversample loops and 50–150 / >150-instr functions so
       each bucket has enough n to report a stable number.
-- [ ] Target ~500–1,000 deduped functions; publish the corpus + build recipe for reproducibility.
+- [ ] Add **real-world code**: functions mined from permissively-licensed GitHub C/C++/Rust repos, not
+      just the test-suite (distribution TTRL would actually be deployed on).
+- [ ] Target ~500–1,000 deduped functions; publish the corpus + build recipe + **`PROBE_TARGET` and
+      LLVM version** for reproducibility.
+- [ ] Sanity-check the result before trusting it: `verify_corpus.py`, plus the Phase 1 Part A
+      perf-sanity check (is `-O0` ≥ `-O3` cycles?) on the new corpus.
 
 ## 2. Handle loops — the central limitation
 
@@ -96,6 +122,11 @@ is the throughput bottleneck.
       multiplier. On the VM cap at ~6 memory-limited workers: 14 workers on 14 GB will hit swap and
       silently turn proofs into `timeout` verdicts, which corrupts the reward signal. **Report
       verified-rewrites/sec** — that number sets the rollout ceiling and the budget.
+- [ ] **`build_corpus --jobs N`** — `build_records` is fully serial (`build_corpus.py:151`): two
+      `clang` invocations per file, then `llvm-extract` + `llvm-mca` per function, all on one core.
+      It uses 1 of the VM's 14 threads. Per-file work is independent, so a process pool over the
+      file list is a near-linear win on the uncapped build. Keep dedup (`_norm_hash`) and
+      `function_id` ordering deterministic so the corpus stays reproducible.
 - [ ] Add a `failed_to_prove` outcome (Alive2 abstains ≠ tool error ≠ proven-different) — Part A flagged
       this; it makes the reward distribution honest. Shared-schema change; coordinate both workstreams.
 - [ ] Cost/latency tracking per run (tokens, API $, Alive2 seconds) for the RL-loop budget.

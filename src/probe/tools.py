@@ -10,21 +10,20 @@ Resolution order for the bin dir:
   2. the directory containing `llvm-mca` on PATH
   3. common Homebrew keg locations
 
-We also target a non-Darwin triple by default (`$PROBE_TARGET`, default aarch64-linux-gnu) so
+We also target a non-Darwin triple by default (`$PROBE_TARGET`, default `<host arch>-linux-gnu`) so
 llvm-mca's asm parser does not choke on macOS directives like `.subsections_via_symbols`.
-
-`$PROBE_CPU` (default cortex-a72) sets a specific CPU otherwise llvm-mca defaults
-`-mcpu` to whatever CPU is running it.
 """
 
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 from pathlib import Path
 
-TARGET_TRIPLE = os.environ.get("PROBE_TARGET", "aarch64-linux-gnu")
-TARGET_CPU = os.environ.get("PROBE_CPU", "cortex-a72")
+TARGET_TRIPLE = (
+    os.environ.get("PROBE_TARGET") or f"{platform.machine().lower()}-linux-gnu"
+)
 
 _FALLBACK_DIRS = [
     "/opt/homebrew/opt/llvm/bin",  # Homebrew on Apple Silicon

@@ -98,11 +98,56 @@ real corpus (no header-skip hacks). 1.3 TB is ample.
    it ourselves.
 3. **Verify `llvm-21-dev` is RTTI-enabled**, or the alive2 link fails. This is the one build-time
    gotcha.
-4. **`--perf timing` needs a quiet host.** If the VM shares a hypervisor with other tenants,
+4. **`PROBE_TARGET` must be set to the VM's real arch.** It defaults to `aarch64-linux-gnu`
+   (`tools.py:23`) — that default exists to stop llvm-mca choking on *macOS* asm directives, and it is
+   wrong on an x86_64 box. `build_corpus` compiles with `--target=$PROBE_TARGET` and `McaPerf` scores
+   at that triple (`perf.py:68`), so getting it wrong silently models a CPU we are not running on.
+   `timing.py` is unaffected (it strips target lines and retargets to host), which is precisely why a
+   mismatched triple makes the §3 mca-vs-wall-clock audit meaningless. **mca cycles are only
+   comparable within one target** — treat the triple as part of the corpus's identity.
+5. **`--perf timing` needs a quiet host.** If the VM shares a hypervisor with other tenants,
    wall-clock is noisy. Keep `mca` as the RL reward; use `timing` for offline audits only, pinned
    cores, low load.
-5. **8 GB VRAM cannot serve the policy** (a 7–8B model is ~14 GB in bf16 before optimizer state).
+6. **8 GB VRAM cannot serve the policy** (a 7–8B model is ~14 GB in bf16 before optimizer state).
    Treat the VM as a dedicated oracle server.
+
+### VM runbook (TODO §1)
+
+```bash
+# 0. one-time: toolchain. Confirm arch FIRST — it decides PROBE_TARGET.
+uname -m                                   # x86_64 -> x86_64-linux-gnu ; aarch64 -> aarch64-linux-gnu
+git submodule update --init --recursive
+./scripts/alive2/01-prereqs.sh             # apt: cmake ninja re2c z3 libz3-dev clang-21 llvm-21-dev
+./scripts/alive2/02-build-alive2.sh        # builds alive-tv only (~15 min, a few GB RAM)
+source scripts/alive2/env.sh               # exports ALIVE_TV + LLVM_BIN
+export PROBE_TARGET=x86_64-linux-gnu       # <- match `uname -m`; put this in the shell profile
+"$ALIVE_TV" --version && "$LLVM_BIN/llvm-mca" --version
+
+# 1. sanity: the whole pipeline offline, no keys, before touching the real corpus
+uv sync --extra dev && uv run pytest
+uv run python -m probe.run_probe --corpus data/bootstrap --backend mock \
+    --k 8 --verifier stub --perf stub
+
+# 2. corpus source (~1 GB shallow clone into ~/.cache/t3rl-corpus; CORPUS_SRC_DIR to relocate)
+./scripts/fetch-corpus.sh
+
+# 3. build UNCAPPED (--max-functions truncates alphabetically; it is not a sampling strategy).
+#    Serial today (TODO §7 --jobs), so expect this to take a while on one core.
+uv run python -m probe.build_corpus --src "$(./scripts/fetch-corpus.sh -q)" \
+    --out data/corpus/testsuite-full.jsonl --with-mca
+
+# 4. is the corpus trustworthy? (both are read-only checks on the new corpus)
+uv run python -m probe.perf_sanity  --corpus data/corpus/testsuite-full.jsonl   # -O0 cycles >= -O3?
+uv run python -m probe.verify_corpus --corpus data/corpus/testsuite-full.jsonl  # Alive2 verdict rate
+```
+
+Step 4 is not optional: `perf_sanity` is the check that the *speed* half of the reward is not noise,
+and `verify_corpus` re-runs the Phase 1 Part A headline on the new distribution. Both numbers should
+be compared against Phase 1's (79% verified, 98% perf sanity) — a large drop means the new corpus is
+harder than what the oracle was validated on, and the honest scope needs revisiting *before* any RL.
+
+Run `verify_corpus` with the bounded worker pool (§7) once it exists; at ~6 workers and a 30 s
+timeout, a few thousand functions is hours, not minutes.
 
 ## Reward shaping (design decision, not yet made)
 

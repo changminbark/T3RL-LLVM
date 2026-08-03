@@ -17,10 +17,15 @@ touches LLVM must fit that envelope. The two limits that actually bind:
 - **RAM, not cores.** Z3 can take 1–2 GB+ per `alive-tv`; **cap parallelism at ~6 workers**, memory-
   limited. Touching the 4 GB swap turns proofs into `timeout` verdicts *silently* — that corrupts the
   reward signal, so it must fail loudly instead (§7).
-- **Set `PROBE_TARGET` to the VM's real arch** (`uname -m` → `x86_64-linux-gnu` or `aarch64-linux-gnu`).
-  It defaults to `aarch64-linux-gnu` — a *macOS* workaround (`tools.py:23`) — and `mca_cycles_o3` is
-  computed at that triple (`perf.py:68`), so a wrong target silently models the wrong CPU. It is part
-  of the corpus's identity: **record it, and never compare mca numbers across targets.**
+- **Set `PROBE_TARGET` *and* `PROBE_CPU` together — they must match.** Defaults are
+  `aarch64-linux-gnu` + `cortex-a72` (`tools.py:26-27`), an ARM pair chosen as a *macOS* workaround.
+  Setting only `PROBE_TARGET=x86_64-linux-gnu` leaves `-mcpu cortex-a72` against an x86 triple, and
+  **`llc` hard-fails** (`LLVM ERROR: 64-bit code requested on a subtarget that doesn't support it`) →
+  `McaPerf.score` returns `None` → **`mca_cycles_o3: null` on every record**, with no error from
+  `build_corpus`. On x86_64 pick the real family from `lscpu` (`znver3`, `skylake`, …); generic
+  `x86-64` works but has a thin scheduling model. The pair is part of the corpus's identity — cycle
+  counts differ by 2–3× across CPU models — so **record both, and never compare mca numbers across
+  them.**
 
 Disk is a non-issue (LLVM+Alive2 ~5.4 GB, llvm-test-suite clone ~1 GB, corpus tens of MB).
 
@@ -31,12 +36,14 @@ numbers are directional, not benchmark-grade.
 
 Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.md)):
 
-- [ ] **Toolchain first.** `01-prereqs.sh` → `02-build-alive2.sh` → `source scripts/alive2/env.sh`;
+- [x] **Toolchain first.** `01-prereqs.sh` → `02-build-alive2.sh` → `source scripts/alive2/env.sh`;
       verify `alive-tv --version` and `$LLVM_BIN/llvm-mca --version`. Export `PROBE_TARGET` (above).
-- [ ] **Build the whole thing, uncapped.** `./scripts/fetch-corpus.sh -q` → `build_corpus --with-mca`
+      *Done on the VM 2026-08-02.*
+- [x] **Build the whole thing, uncapped.** `./scripts/fetch-corpus.sh -q` → `build_corpus --with-mca`
       **without** `--max-functions`. Rationale below — the cap is not a sampling strategy. Expect most
       of llvm-test-suite/SingleSource to fail `clang` standalone (missing harness headers); those are
       skipped silently, which is fine, but **log the skip rate** so we know the yield.
+      *Run on the VM 2026-08-02 — **record count + bucket histogram not yet captured here** (§1 note).*
 - [ ] **Then subsample to a balanced corpus.** `--max-functions` truncates in `sorted(rglob("*.c"))`
       order and returns early (`build_corpus.py:180`), so it yields the alphabetically-first N — the
       *opposite* of the balance we want. Needs a new step: build full → stratify by
@@ -47,8 +54,22 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
       just the test-suite (distribution TTRL would actually be deployed on).
 - [ ] Target ~500–1,000 deduped functions; publish the corpus + build recipe + **`PROBE_TARGET` and
       LLVM version** for reproducibility.
-- [ ] Sanity-check the result before trusting it: `verify_corpus.py`, plus the Phase 1 Part A
-      perf-sanity check (is `-O0` ≥ `-O3` cycles?) on the new corpus.
+- [x] Sanity-check the result before trusting it: `verify_corpus.py`, plus the Phase 1 Part A
+      perf-sanity check (is `-O0` ≥ `-O3` cycles?) on the new corpus. *Both run on the VM 2026-08-02;
+      **verdicts vs Phase 1's 79% / 98% not yet compared** — see the open numbers below.*
+
+**Open — the four numbers that decide what happens next.** The commands have been run; their outputs
+live only on the VM and are not recorded anywhere in this repo. Until they are, §1 is "executed" but
+not "known", and the items below can't be scoped:
+
+- [ ] **Record the corpus build result:** total records, the per-`(size_bucket, has_loops)` histogram
+      `build_corpus` prints, and the skip rate (`.c` files walked vs records produced).
+- [ ] **Record the oracle result on the new corpus:** `verify_corpus` verdict rate and `perf_sanity`
+      percentage, each **compared against Phase 1's 79% verified / 98% perf-sanity**. A large drop
+      means the new distribution is harder than what the oracle was validated on — that is a
+      scope-changing finding, not a footnote, and it must be caught *before* any RL.
+- [ ] Commit these into `docs/phase3/` (or a `docs/phase1/partA-findings.md` addendum) with the
+      `PROBE_TARGET`, LLVM version, and llvm-test-suite commit, so the corpus is reproducible.
 
 ## 2. Handle loops — the central limitation
 

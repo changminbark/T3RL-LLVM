@@ -120,8 +120,14 @@ git submodule update --init --recursive
 ./scripts/alive2/01-prereqs.sh             # apt: cmake ninja re2c z3 libz3-dev clang-21 llvm-21-dev
 ./scripts/alive2/02-build-alive2.sh        # builds alive-tv only (~15 min, a few GB RAM)
 source scripts/alive2/env.sh               # exports ALIVE_TV + LLVM_BIN
-export PROBE_TARGET=x86_64-linux-gnu       # <- match `uname -m`; put this in the shell profile
+# Triple AND cpu must match, or llc hard-fails and every mca_cycles_o3 comes out null:
+export PROBE_TARGET=x86_64-linux-gnu       # <- match `uname -m`
+export PROBE_CPU=znver3                    # <- match `lscpu` family (aarch64 default: cortex-a72)
 "$ALIVE_TV" --version && "$LLVM_BIN/llvm-mca" --version
+# prove the pair before building anything (must print a cycle count, not an error):
+printf 'define i32 @f(i32 %%a){\n %%b = add i32 %%a, 1\n ret i32 %%b\n}\n' > /tmp/t.ll
+"$LLVM_BIN/llc" -mtriple "$PROBE_TARGET" -mcpu "$PROBE_CPU" -o /tmp/t.s /tmp/t.ll \
+  && "$LLVM_BIN/llvm-mca" -mtriple "$PROBE_TARGET" -mcpu "$PROBE_CPU" /tmp/t.s | grep 'Total Cycles'
 
 # 1. sanity: the whole pipeline offline, no keys, before touching the real corpus
 uv sync --extra dev && uv run pytest
@@ -135,6 +141,10 @@ uv run python -m probe.run_probe --corpus data/bootstrap --backend mock \
 #    Serial today (TODO §7 --jobs), so expect this to take a while on one core.
 uv run python -m probe.build_corpus --src "$(./scripts/fetch-corpus.sh -q)" \
     --out data/corpus/testsuite-full.jsonl --with-mca
+
+# 3b. FIRST check: did mca actually score anything? A nonzero count here means the
+#     triple/cpu pair was wrong and the corpus must be rebuilt after fixing it.
+grep -c '"mca_cycles_o3":null' data/corpus/testsuite-full.jsonl
 
 # 4. is the corpus trustworthy? (both are read-only checks on the new corpus)
 uv run python -m probe.perf_sanity  --corpus data/corpus/testsuite-full.jsonl   # -O0 cycles >= -O3?
@@ -171,9 +181,12 @@ Write this down in a spec before coding; it's a reviewer-visible choice.
 - [ ] Launch/monitor the RFT job via the eval-protocol CLI.
 
 **VM owner (Debian box):**
-- [ ] `01-prereqs.sh` + `02-build-alive2.sh`; confirm RTTI, `alive-tv --version`, `source env.sh`.
-- [ ] Build the real corpus: `./scripts/fetch-corpus.sh` → `build_corpus --max-functions 800+`
-      (TODO §1). This is on the critical path — GRPO on 64 functions will just memorize.
+- [x] `01-prereqs.sh` + `02-build-alive2.sh`; confirm RTTI, `alive-tv --version`, `source env.sh`.
+      *2026-08-02.*
+- [x] Build the real corpus (uncapped) + `perf_sanity` + `verify_corpus`. *2026-08-02 — **outputs not
+      yet recorded in the repo**; see TODO §1 "the four numbers".*
+- [ ] Stratified sampler: full corpus → balanced subset by `(size_bucket, has_loops)`. Blocks the
+      balanced corpus TODO §1 asks for; `--max-functions` cannot do this.
 - [ ] Parallel Alive2 worker pool (~6 workers, memory-capped) + verdict cache keyed on
       `(src, tgt)` hash (TODO §7). **Report verified-rewrites/sec** — that number sets the rollout
       throughput ceiling and therefore the budget.

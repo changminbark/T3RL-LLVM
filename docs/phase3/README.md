@@ -269,6 +269,11 @@ report  695 functions   (cap 150/stratum)
 **perf sanity on `train`: 96.6% (1491/1543), up from 88.0%** on the raw corpus — Phase 1's reference
 was 98%. The `main`/libc diagnosis was right.
 
+Final corpus after the intrinsic fix + `--train-cap-per-bucket 300`: **train 577 · report 678**, perf
+sanity **95.7% (552/577)**. Note that is *lower* than the uncapped 96.6%: the cap removed 943
+tiny/loop-free functions, which were the cleanest ones, so the inversion **rate** rose (3.4% → 4.3%)
+even though the absolute count fell 52 → 25. Denominator effect, not a regression.
+
 **But llvm-mca prices a single call at ~104 cycles** (measured: `call` → 104, plain arithmetic → 4,
 aarch64/cortex-a72). That explains the entire residual: the leftover inversions cluster at
 `O0=107 → O3=108`, i.e. one cycle of real difference on top of ~104 cycles of constant call overhead.
@@ -280,6 +285,20 @@ Two consequences, and the second is the serious one:
    some of these. The fix is a **minimum relative speedup** before `verified_faster` is granted (see
    TODO §5) and/or `--perf timing` for this population. `make_corpora` now reports the call-containing
    fraction so the scale is visible.
+
+The 25 residual inversions are **two known llvm-mca limitations, not corpus defects**, and the split
+is visible in the numbers:
+
+- **call-swamped** (~19): the `O0=107 → O3=108` cluster, one real cycle on ~104 of call overhead.
+- **loop unrolling** (~6): `memset 13 → 23`, `my_memcpy 16 → 30`, `pr60960::f1 16 → 17`. These are
+  *not* the idiom-recognition artifact — the magnitudes are far too small for a call. `-O3` unrolls or
+  vectorizes, so a single pass through the code does more work while the loop runs fewer times, and
+  `llvm-mca --iterations=1` cannot see trip counts. This is exactly the 69%-on-loops weakness in
+  [perf-scorer-findings](../phase1/perf-scorer-findings.md).
+
+Together with the 24% of `train` that contains a call, this is the strongest argument yet for TODO §3's
+"real timing as the primary reward": mca is unreliable on both call-containing *and* loop functions,
+which between them are most of what has interesting headroom.
 
 **The train corpus is still the wrong shape, and the oracle filter made it worse.** Verified-only left
 1251/1543 (**81%**) in ≤20/loop-free, versus 66% in the raw corpus — Alive2 verifies tiny loop-free

@@ -50,9 +50,11 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
       `sorted(rglob("*.c"))` order (`build_corpus.py:180`), yielding the alphabetically-first N.
 - [x] **Ran on the VM 2026-08-03: train 1543 · report 695, and perf sanity went 88.0% → 96.6%**
       (Phase 1 reference: 98%). The `main`/libc diagnosis held.
-- [ ] **Re-run `make_corpora` after the intrinsic fix.** `llvm.memcpy`/`memset` idiom recognition was
-      slipping through (all `llvm.*` was ignored); on the bootstrap corpus the drop count went 1 → 15.
-      Expect a few dozen more drops and perf sanity a little above 96.6%.
+- [x] **Re-ran with the intrinsic fix + 300/stratum cap: train 577 · report 678, perf sanity 95.7%.**
+      Lower than the uncapped 96.6% purely by denominator (the cap removed the cleanest 943 tiny
+      functions; absolute inversions fell 52 → 25). The 25 that remain are two documented llvm-mca
+      limits — call-swamped scores (~19) and loop unrolling vs `--iterations=1` (~6) — not corpus
+      defects. **§1 is done; the corpus is good enough to train on.**
 - [ ] **Fix the train corpus shape — the oracle filter made the skew worse.** Verified-only is
       **81% tiny/loop-free** (1251/1543) vs 66% raw, because Alive2 verifies exactly the functions
       Phase 2 found are *already optimal at -O3*. No headroom ⇒ reward 0 on every rollout, same dead
@@ -110,6 +112,10 @@ counts). Today the honest scope is loop-free.
 - [ ] Run `timing_validation` on the **big corpus on a quiet Linux box** for paper-grade
       mca-vs-wall-clock numbers (bootstrap gave 100% wall-clock vs 90.6% mca, Spearman 0.51).
 - [ ] Consider **real timing as the primary reward**; keep `code_size_bytes` as a cheap secondary.
+      **The 2026-08-03 corpus work strengthened this a lot:** mca is unreliable on call-containing
+      functions (one call ≈ 104 cycles swamps everything; **24% of the train corpus**) *and* on loops
+      (unrolling vs `--iterations=1`) — between them, most of what has interesting headroom. Every
+      residual perf-sanity inversion is one of these two.
 - [ ] Quantify how often mca's `verified_faster` calls survive wall-clock (the `--rewrites` audit) on
       a real run — the reviewer-critical number.
 

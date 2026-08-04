@@ -170,13 +170,30 @@ on trivially-equal IR or `unsupported` otherwise — enough to exercise plumbing
 
 **`RewriteOutcome`** (`outcome.py`) — one label per generated rewrite, the future reward
 distribution:
-`invalid_syntax` · `counterexample` · `timeout` · `unsupported` · `verified_no_gain` ·
-`verified_faster`
+`invalid_syntax` · `error` · `counterexample` · `timeout` · `unsupported` · `failed_to_prove` ·
+`verified_no_gain` · `verified_faster`
+
+`VerdictStatus` (`schema.py`) mirrors this on the verifier side:
+`verified` · `counterexample` · `timeout` · `unsupported` · `failed_to_prove` · `error`.
+
+Three distinctions the reward depends on (added 2026-08-03, per Part A's recommendation):
+
+- **`failed_to_prove`** — Alive2 ran and abstained (`Couldn't prove the correctness of the
+  transformation`). Not proven-different, not a tool failure. 12.5% of Part A's checks and **19.0%**
+  of the 3239-check test-suite run, so folding it into `error` misreported a fifth of the corpus.
+- **`error`** — *our* toolchain broke (missing `alive-tv`, crash). Previously mapped to
+  `invalid_syntax`, which blamed the model for our own infrastructure: a missing oracle scored every
+  sample as "the model emitted garbage".
+- **`invalid_syntax`** now means only what it says — the model's output didn't parse.
+
+All three yield reward 0, so no metric changes; what changes is that the outcome distribution now
+attributes failures to the right party.
 
 Classification pipeline for a single rewrite:
 
 1. extract IR (format A) or C→lower→IR (format B); fails to parse/assemble → `invalid_syntax`.
-2. `verifier.check(src_ir, rewrite_ir)` → map `timeout`/`unsupported`/`counterexample` through.
+2. `verifier.check(src_ir, rewrite_ir)` → map `timeout`/`unsupported`/`counterexample`/
+   `failed_to_prove`/`error` through.
 3. if `verified`: compare `perf.score(rewrite_ir).mca_cycles` vs `mca_cycles_o3` →
    `verified_faster` (strictly fewer cycles than **O3**) else `verified_no_gain`.
 

@@ -20,6 +20,9 @@ from .verifier import AliveCliVerifier
 
 _STATUSES = [s.value for s in VerdictStatus]
 
+# Consecutive tool errors before we conclude the oracle is missing rather than the code hard.
+_TOOL_ERROR_ABORT = 20
+
 
 def _key(rec: CorpusRecord) -> str:
     return f"{rec.size_bucket()}|loops={rec.has_loops}"
@@ -84,12 +87,24 @@ def run(args) -> None:
     records = list(load_corpus(Path(args.corpus)).values())
     verifier = AliveCliVerifier(cli_cmd=args.cli)
     verdicts: dict[str, Verdict] = {}
+    n_tool_error = 0
     for rec in tqdm(records, desc="verify O0->O3"):
         if not rec.o3_baseline_ir:
             continue
-        verdicts[rec.function_id] = verifier.check(
-            rec.src_ir, rec.o3_baseline_ir, timeout_s=args.timeout
-        )
+        v = verifier.check(rec.src_ir, rec.o3_baseline_ir, timeout_s=args.timeout)
+        verdicts[rec.function_id] = v
+        # A run where the oracle is simply absent must not complete and report "0% verified"
+        # as if it were a finding — that is indistinguishable from a real result in a JSON file.
+        if v.status is VerdictStatus.error:
+            n_tool_error += 1
+            if n_tool_error >= _TOOL_ERROR_ABORT:
+                raise SystemExit(
+                    f"aborting: first {n_tool_error} checks were tool errors, e.g.\n"
+                    f"  {(v.counterexample or '').splitlines()[:1]}\n"
+                    "Is alive-tv built and $ALIVE_TV exported? (source scripts/alive2/env.sh)"
+                )
+        else:
+            n_tool_error = 0
 
     table = aggregate(records, verdicts)
     text = format_table(table)
@@ -101,7 +116,15 @@ def run(args) -> None:
         json.dumps({"timeout_s": args.timeout, "table": table}, indent=2)
     )
     (out / "verdict_rates.txt").write_text(text + "\n")
-    print(f"wrote {out}/verdict_rates.json and .txt")
+    # Per-function verdicts: the aggregate table cannot tell you *which* functions the oracle
+    # handles, which is exactly what building a train corpus needs (see make_corpora.py).
+    (out / "verdicts.jsonl").write_text(
+        "".join(
+            json.dumps({"function_id": fid, **v.model_dump(mode="json")}) + "\n"
+            for fid, v in sorted(verdicts.items())
+        )
+    )
+    print(f"wrote {out}/verdict_rates.json, .txt, and verdicts.jsonl")
 
 
 def build_parser() -> argparse.ArgumentParser:

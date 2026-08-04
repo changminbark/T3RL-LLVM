@@ -22,6 +22,13 @@ _UNSUPPORTED_MARKERS = ("unsupported",)
 _TIMEOUT_MARKERS = ("smt error: timeout", "timed out", "timeout")
 _INCORRECT_MARKERS = ("doesn't verify", "value mismatch")
 _CORRECT_MARKERS = ("seems to be correct",)
+# Alive2 ran and declined to conclude. Not a tool failure, and NOT proven-different: the
+# transformation may well be correct. Part A measured this at 12.5% of checks.
+_ABSTAIN_MARKERS = (
+    "couldn't prove the correctness",
+    "source doesn't reach a return",
+    "smt-incomplete",
+)
 
 
 def _capture_counterexample(text: str, limit: int = 2000) -> str:
@@ -55,6 +62,12 @@ def classify_alive_output(
         )
     if any(m in low for m in _CORRECT_MARKERS):
         return Verdict(status=VerdictStatus.verified)
+    # Checked after the decisive verdicts: a run that both abstains and times out is a timeout.
+    if any(m in low for m in _ABSTAIN_MARKERS):
+        return Verdict(
+            status=VerdictStatus.failed_to_prove,
+            counterexample=_capture_counterexample(text),
+        )
     return Verdict(
         status=VerdictStatus.error,
         counterexample=(stderr or stdout)[:2000].strip() or None,

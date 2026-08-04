@@ -149,6 +149,14 @@ grep -c '"mca_cycles_o3":null' data/corpus/testsuite-full.jsonl
 # 4. is the corpus trustworthy? (both are read-only checks on the new corpus)
 uv run python -m probe.perf_sanity  --corpus data/corpus/testsuite-full.jsonl   # -O0 cycles >= -O3?
 uv run python -m probe.verify_corpus --corpus data/corpus/testsuite-full.jsonl  # Alive2 verdict rate
+#    ^ writes results/verdicts.jsonl (per function), which step 5 needs.
+#      Aborts early if alive-tv is missing rather than reporting 0% verified as a "result".
+
+# 5. derive the two corpora, then confirm the filter worked
+uv run python -m probe.make_corpora --corpus data/corpus/testsuite-full.jsonl \
+    --verdicts results/verdicts.jsonl \
+    --out-train data/corpus/train.jsonl --out-report data/corpus/report.jsonl
+uv run python -m probe.perf_sanity --corpus data/corpus/train.jsonl   # expect ~98%, up from 88%
 ```
 
 Step 4 is not optional: `perf_sanity` is the check that the *speed* half of the reward is not noise,
@@ -158,6 +166,109 @@ harder than what the oracle was validated on, and the honest scope needs revisit
 
 Run `verify_corpus` with the bounded worker pool (§7) once it exists; at ~6 workers and a 30 s
 timeout, a few thousand functions is hours, not minutes.
+
+### Corpus build result — 2026-08-02
+
+llvm-test-suite/SingleSource, uncapped, on the Debian VM (`scripts/corpus_report.py`):
+
+```
+records             3414
+no o3_baseline_ir     175  (  5.1%)   llvm-extract failed; null mca expected
+null mca_cycles       178  (  5.2%)
+  had O3, mca fail      3  (  0.1%)   <- llc/mca genuinely failed
+scored               3236  ( 94.8%)
+```
+
+**94.8% scored, 3 real mca failures — the `PROBE_TARGET`/`PROBE_CPU` pair was correct.** Buckets over
+the 3236 scored records:
+
+| size | loop-free | loops | total |
+|---|---:|---:|---:|
+| ≤20 | 2120 | 33 | 2153 |
+| 20–50 | 517 | 213 | 730 |
+| 50–150 | 112 | 110 | 222 |
+| >150 | 33 | 98 | 131 |
+| **total** | **2782** | **454** | **3236** |
+
+Read: **the raw distribution is still 66% tiny loop-free** — the same skew as the old 64-function
+corpus, just 50× more of it. Phase 2 found those are mostly already optimal at `-O3`, so most of this
+corpus is *dead weight as a reward target*. What's new and valuable is the absolute counts in the
+buckets that matter: 213 small loops (Phase 2's best bucket had 12) and 110 mid-size loops. Every
+bucket now clears n=33, so per-bucket numbers can finally be reported without n=1 caveats.
+
+### Oracle + perf sanity on the new corpus — 2026-08-02
+
+**`verify_corpus` (valid run, 35 min, 3239 checked):**
+
+| | this corpus | Phase 1 (784 checked) |
+|---|---:|---:|
+| verified | **51.9%** (1680) | 79% |
+| counterexample | **13.0%** (421) | 5% |
+| couldn't-prove / abstain (`error`) | 19.0% (617) | 12.5% |
+| unsupported | 13.0% (420) | 3% |
+| timeout | 3.1% (101) | 0.4% |
+| **loop-free** | **58.0%** (1616/2784) | 81% |
+| **loops** | **14.1%** (64/455) | 4% (n=23) |
+
+Per bucket, verified rate: ≤20 loop-free **63%** (1331) · 20–50 loop-free 47% (243) · 50–150 loop-free
+35% (39) · ≤20 loops 21% · 20–50 loops 19% (40) · 50–150 loops 15% (16) · >150 loop-free 9% ·
+>150 loops **1%** (89/98 `unsupported`).
+
+Three things to take from this:
+
+1. **1,680 functions the oracle provably handles.** That is the train-corpus pool, and it is ~26× the
+   entire old corpus. The headline drop (79% → 52%) is *composition*, not regression: Phase 1's corpus
+   was hand-curated single-function C files; this is a compiler stress-test suite.
+2. **`error` is Alive2 abstaining, not crashing** — Phase 1 established this is mostly
+   `Couldn't prove the correctness of the transformation` (partA-findings). It behaves like
+   timeout/unsupported for reward purposes (not verified → 0), which is exactly why TODO §7's
+   `failed_to_prove` outcome matters: 19% of the corpus is currently filed under a name that reads
+   like a bug.
+3. **Counterexamples tripled, 5% → 13% (421).** These claim `-O0` and `-O3` differ, which is not
+   plausible as 421 LLVM miscompiles. They are `llvm-extract` context artifacts — the `-O3` copy
+   specializes on callers/globals the extracted `-O0` copy cannot see. 283 of them are in the ≤20
+   loop-free bucket, where out-of-context specialization is most likely. **TODO §6 is no longer
+   theoretical; it now has an n=421 target.**
+
+**Loops are not as dead as Phase 1 suggested** — 14.1% vs 4%, but Phase 1's loop sample was n=23, so
+4% was 1/23 and meaningless. At n=455 the honest statement is: loops verify at ~14%, and above 150
+instructions they are hopeless (1%, almost entirely `unsupported`).
+
+**Oracle throughput (the RL budget number):** 0.62 s mean per check serial (median 0.02–0.05 s, p90 up
+to 22 s on >150 loop-free). At the planned ~6 workers that is ~9.7 checks/s → **~1.6 s of oracle time
+per G=16 GRPO step**. The oracle is *not* the bottleneck we feared, provided the corpus excludes the
+>150 buckets where p90 blows out.
+
+**`perf_sanity`: 88% monotonic (2847/3236), vs Phase 1's 98%.** This one is real, and the inversion
+list explains itself:
+
+- **libc reimplementations.** `builtins/lib/strlen::strlen` goes `O0=15 → O3=110`; same shape for
+  `memcpy`, `strcmp`, `strcat`, `abs`. At `-O3` LLVM's loop-idiom recognition spots the hand-written
+  loop and replaces it with a **call to the very libc function being defined**. mca models the call as
+  expensive, so `-O3` scores "slower". The rewrite is legitimate; the *measurement* is meaningless.
+- **`main` drivers.** A large share of the rest are `main`, clustered at ~105–120 cycles at both
+  levels — test harness scaffolding, not optimizable kernels.
+
+Both are artifacts of mining a *compiler test suite*: gcc-c-torture is full of libc reimplementations
+and driver `main`s. Neither existed in the old 64-function corpus, which is why 98% → 88%. Filter them
+out (drop `main`; drop functions whose `-O3` IR calls a function the `-O0` IR does not) rather than
+treating 88% as the oracle degrading. This is the same family as TODO §6's spurious-counterexample
+audit: `llvm-extract` pulls a function out of context and the `-O3` copy specializes on things the
+`-O0` copy cannot see.
+
+### Two derived corpora, not one
+
+The balanced corpus TODO §1 asks for is for **reporting**; the RL stream wants something different,
+and conflating them will waste most of the rollout budget:
+
+- **Report corpus** (~900, balanced): downsample ≤20/loop-free to ~150, keep everything in 50–150 and
+  >150, keep all loops. Gives stable per-bucket numbers for the paper's tables.
+- **Train corpus** (RL stream): filter to functions where **the oracle actually returns a verdict**
+  *and* there is headroom over `-O3`. A function Alive2 can never verify contributes reward 0 to every
+  rollout forever — it is not a hard example, it is a dead one, and GRPO learns nothing from a group
+  that is uniformly zero. Alive2 verifies only ~4% of loops (Phase 1), so a size/loop-balanced corpus
+  is close to the *worst* choice for training. Build this one from the `verify_corpus` output, not
+  from the bucket histogram.
 
 ## Reward shaping (design decision, not yet made)
 

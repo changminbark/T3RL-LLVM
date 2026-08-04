@@ -29,7 +29,11 @@ _VERDICT_TO_OUTCOME = {
     VerdictStatus.counterexample: RewriteOutcome.counterexample,
     VerdictStatus.timeout: RewriteOutcome.timeout,
     VerdictStatus.unsupported: RewriteOutcome.unsupported,
-    VerdictStatus.error: RewriteOutcome.invalid_syntax,
+    VerdictStatus.failed_to_prove: RewriteOutcome.failed_to_prove,
+    # A tool failure is ours, not the model's. This used to report as `invalid_syntax`, which
+    # inflated the model's apparent error rate with our own broken toolchain (e.g. a missing
+    # alive-tv scores every sample as "the model emitted garbage"). Reward is 0 either way.
+    VerdictStatus.error: RewriteOutcome.error,
 }
 
 

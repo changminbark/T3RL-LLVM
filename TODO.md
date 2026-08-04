@@ -44,12 +44,16 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
       of llvm-test-suite/SingleSource to fail `clang` standalone (missing harness headers); those are
       skipped silently, which is fine, but **log the skip rate** so we know the yield.
       *Run on the VM 2026-08-02 — **record count + bucket histogram not yet captured here** (§1 note).*
-- [ ] **Then subsample to a balanced corpus.** `--max-functions` truncates in `sorted(rglob("*.c"))`
-      order and returns early (`build_corpus.py:180`), so it yields the alphabetically-first N — the
-      *opposite* of the balance we want. Needs a new step: build full → stratify by
-      `(size_bucket, has_loops)` → sample per stratum. **This is the missing tool for the next bullet.**
-- [ ] **Balance the buckets** — deliberately oversample loops and 50–150 / >150-instr functions so
-      each bucket has enough n to report a stable number.
+- [x] **Stratified sampler + filters written** (`probe/make_corpora.py`, 9 tests). Emits **both**
+      corpora in one pass: `report` (stratum-capped, balanced) and `train` (oracle-verifiable,
+      artifact-filtered). `--max-functions` was never a sampling strategy — it truncates in
+      `sorted(rglob("*.c"))` order (`build_corpus.py:180`), yielding the alphabetically-first N.
+- [ ] **Run it on the VM** once `verdicts.jsonl` exists (needs the `verify_corpus` rerun — the
+      previous run predates per-function verdict output):
+      `make_corpora --corpus testsuite-full.jsonl --verdicts results/verdicts.jsonl
+      --out-train train.jsonl --out-report report.jsonl`. Then re-run `perf_sanity` on `train` — it
+      should climb from 88% back toward Phase 1's 98% once `main`s and libc idioms are gone. **That
+      recovery is the check that the filter did what it claims.**
 - [ ] Add **real-world code**: functions mined from permissively-licensed GitHub C/C++/Rust repos, not
       just the test-suite (distribution TTRL would actually be deployed on).
 - [ ] Target ~500–1,000 deduped functions; publish the corpus + build recipe + **`PROBE_TARGET` and
@@ -62,12 +66,24 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
 live only on the VM and are not recorded anywhere in this repo. Until they are, §1 is "executed" but
 not "known", and the items below can't be scoped:
 
-- [ ] **Record the corpus build result:** total records, the per-`(size_bucket, has_loops)` histogram
-      `build_corpus` prints, and the skip rate (`.c` files walked vs records produced).
-- [ ] **Record the oracle result on the new corpus:** `verify_corpus` verdict rate and `perf_sanity`
-      percentage, each **compared against Phase 1's 79% verified / 98% perf-sanity**. A large drop
-      means the new distribution is harder than what the oracle was validated on — that is a
-      scope-changing finding, not a footnote, and it must be caught *before* any RL.
+- [x] **Record the corpus build result.** 2026-08-02: **3414 records, 3236 scored (94.8%)**, only 3
+      real mca failures (the target/cpu pair was right). Distribution is still **66% tiny loop-free**,
+      but every bucket now clears n=33 and small loops went 12 → 213. Table + reading:
+      [docs/phase3](docs/phase3/README.md#corpus-build-result--2026-08-02). Still unrecorded: the skip
+      rate (`.c` files walked vs records produced).
+- [x] **`verify_corpus` on the new corpus: 51.9% verified (1680/3239)** vs Phase 1's 79% — a
+      *composition* difference, not a regression. Loop-free 58%, loops 14.1% (Phase 1's 4% was 1/23).
+      **1,680 functions form the train-corpus pool.** Oracle throughput: 0.62 s mean/check serial →
+      ~1.6 s per G=16 step at 6 workers, so the oracle is **not** the feared bottleneck (excluding
+      >150-instr functions, p90 22 s). Full table:
+      [docs/phase3](docs/phase3/README.md#oracle--perf-sanity-on-the-new-corpus--2026-08-02).
+- [x] **`perf_sanity` on the new corpus: 88% monotonic (2847/3236)** vs Phase 1's 98%. Explained, not
+      a regression: gcc-c-torture is full of **libc reimplementations** (`-O3` turns a hand-written
+      `strlen` loop into a *call to `strlen`* — `O0=15 → O3=110`) and **driver `main`s**. Details:
+      [docs/phase3](docs/phase3/README.md#oracle--perf-sanity-on-the-new-corpus--2026-08-02).
+- [ ] **Filter the corpus accordingly:** drop `main`, and drop functions whose `-O3` IR calls a
+      function the `-O0` IR does not. Re-measure perf sanity after; it should approach Phase 1's 98%.
+      Same root cause as §6's spurious-counterexample audit (`llvm-extract` strips context).
 - [ ] Commit these into `docs/phase3/` (or a `docs/phase1/partA-findings.md` addendum) with the
       `PROBE_TARGET`, LLVM version, and llvm-test-suite commit, so the corpus is reproducible.
 
@@ -133,7 +149,10 @@ is the throughput bottleneck.
       the two cheats (wrong-but-fast, unchanged) stay at reward 0.
 - [ ] Investigate **spurious counterexamples**: `llvm-extract` pulls a function out of context, so the
       `-O3` copy can specialize on callers/globals and diverge from `-O0` — some counterexamples are
-      artifacts, not real miscompiles. Quantify and filter.
+      artifacts, not real miscompiles. Quantify and filter. **Now measurable: 421 counterexamples
+      (13.0%) on the new corpus, up from Phase 1's 5%, 283 of them in the ≤20 loop-free bucket.** 421
+      real LLVM miscompiles is not credible, so this is close to a pure artifact population — a good
+      thing, because it means a filter can recover them rather than a scope reduction.
 
 ## 7. Engineering / infra
 
@@ -148,8 +167,16 @@ is the throughput bottleneck.
       It uses 1 of the VM's 14 threads. Per-file work is independent, so a process pool over the
       file list is a near-linear win on the uncapped build. Keep dedup (`_norm_hash`) and
       `function_id` ordering deterministic so the corpus stays reproducible.
-- [ ] Add a `failed_to_prove` outcome (Alive2 abstains ≠ tool error ≠ proven-different) — Part A flagged
-      this; it makes the reward distribution honest. Shared-schema change; coordinate both workstreams.
+- [x] **Fail loudly when the oracle is absent.** `verify_corpus` now aborts after 20 consecutive tool
+      errors with a message pointing at `env.sh` — the 2026-08-02 run completed and reported
+      `verified_rate 0.00` as if it were a finding. Still open: the same guard in `run_probe`
+      (refuse to start when `--verifier alive` is asked for and `alive-tv` doesn't resolve).
+- [x] Added a `failed_to_prove` outcome (Alive2 abstains ≠ tool error ≠ proven-different) — Part A
+      flagged this; it makes the reward distribution honest. Shared-schema change, mirrored in
+      `docs/phase1/partB-plan.md` per the `schema.py` rule. **Also split `error` out of
+      `invalid_syntax`**: a tool failure was being reported as the model emitting garbage. All three
+      are reward 0, so no metric moves — but `invalid_syntax` numbers are no longer comparable with
+      pre-2026-08-03 runs, including [ir-robustness.md](docs/phase2/ir-robustness.md)'s 61%→10%.
 - [ ] Cost/latency tracking per run (tokens, API $, Alive2 seconds) for the RL-loop budget.
 
 ## 8. Paper positioning

@@ -81,6 +81,25 @@ def test_garbage_is_error():
     assert "boom" in (v.counterexample or "")
 
 
+def test_couldnt_prove_is_abstention_not_error():
+    # Alive2 ran fine and declined to conclude. This is NOT a tool failure and NOT
+    # proven-different — the transformation may well be correct. 12.5% of Part A's checks.
+    v = classify_alive_output(
+        "ERROR: Couldn't prove the correctness of the transformation\n", "", 1, False
+    )
+    assert v.status is VerdictStatus.failed_to_prove
+
+
+def test_abstention_never_outranks_a_decisive_verdict():
+    # Alive2 can print an abstention for one function and a counterexample for another in the
+    # same module. Correctness must win: never report "unproven" when we have a witness.
+    text = (
+        "ERROR: Couldn't prove the correctness of the transformation\n"
+        "Transformation doesn't verify!\nExample:\n i32 %x = #x00000001\n"
+    )
+    assert classify_alive_output(text, "", 1, False).status is VerdictStatus.counterexample
+
+
 def test_mixed_output_is_conservative_counterexample():
     # A module output containing BOTH a correct and a failing transformation
     # must be classified counterexample, never verified.

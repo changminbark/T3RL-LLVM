@@ -41,6 +41,9 @@ class VerdictStatus(str, Enum):
     counterexample = "counterexample"
     timeout = "timeout"
     unsupported = "unsupported"
+    # Alive2 ran fine but abstained ("Couldn't prove the correctness of the transformation").
+    # Distinct from `error`, which means the tool itself failed (missing binary, crash).
+    failed_to_prove = "failed_to_prove"
     error = "error"
 
 
@@ -77,10 +80,12 @@ class RewriteOutcome(str, Enum):
     Ordered from worst to best signal.
     """
 
-    invalid_syntax = "invalid_syntax"
+    invalid_syntax = "invalid_syntax"  # the model's output didn't parse — the model's fault
+    error = "error"  # the toolchain broke — ours, not the model's; never conflate with the above
     counterexample = "counterexample"
     timeout = "timeout"
     unsupported = "unsupported"
+    failed_to_prove = "failed_to_prove"  # prover abstained; correctness unknown, so reward 0
     verified_no_gain = "verified_no_gain"
     verified_faster = "verified_faster"
 

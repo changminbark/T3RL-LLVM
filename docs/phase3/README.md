@@ -256,6 +256,39 @@ treating 88% as the oracle degrading. This is the same family as TODO §6's spur
 audit: `llvm-extract` pulls a function out of context and the `-O3` copy specializes on things the
 `-O0` copy cannot see.
 
+### Filter result — 2026-08-03
+
+`make_corpora` on the 3414-record build, with `verdicts.jsonl` from the (valid) verify run:
+
+```
+train  1543 functions   dropped: 842 driver main · 625 unverifiable · 178 unscoreable
+                                 121 libc idiom · 105 >150-instr
+report  695 functions   (cap 150/stratum)
+```
+
+**perf sanity on `train`: 96.6% (1491/1543), up from 88.0%** on the raw corpus — Phase 1's reference
+was 98%. The `main`/libc diagnosis was right.
+
+**But llvm-mca prices a single call at ~104 cycles** (measured: `call` → 104, plain arithmetic → 4,
+aarch64/cortex-a72). That explains the entire residual: the leftover inversions cluster at
+`O0=107 → O3=108`, i.e. one cycle of real difference on top of ~104 cycles of constant call overhead.
+Two consequences, and the second is the serious one:
+
+1. Those ~52 remaining "inversions" are not inversions; they are noise on a swamped measurement.
+2. **For any call-containing function, a rewrite that shaves one cycle scores `verified_faster` at
+   1.009× — a "win" that is entirely a static-model artifact.** Phase 2's coverage numbers may include
+   some of these. The fix is a **minimum relative speedup** before `verified_faster` is granted (see
+   TODO §5) and/or `--perf timing` for this population. `make_corpora` now reports the call-containing
+   fraction so the scale is visible.
+
+**The train corpus is still the wrong shape, and the oracle filter made it worse.** Verified-only left
+1251/1543 (**81%**) in ≤20/loop-free, versus 66% in the raw corpus — Alive2 verifies tiny loop-free
+functions most easily, and those are exactly the ones Phase 2 found are *already optimal at -O3*. A
+function with no headroom returns reward 0 on every rollout just as surely as one that never verifies.
+`--train-cap-per-bucket` (default 300) blunts this, but the real filter needs headroom data we do not
+have yet: **the `qwen3-8b` baseline run produces it** — keep the functions that ever yielded a
+`verified_faster` sample, and that becomes the v2 train stream.
+
 ### Two derived corpora, not one
 
 The balanced corpus TODO §1 asks for is for **reporting**; the RL stream wants something different,

@@ -37,10 +37,26 @@ _CALL_RE = re.compile(r"\bcall\b[^@\n]*@([A-Za-z0-9_.$]+)")
 # ~22 s, which would dominate rollout time for almost no reward signal.
 _EXCLUDED_TRAIN_BUCKETS = (">150",)
 
+# Intrinsics that are pure bookkeeping and say nothing about what the code does. Everything else —
+# crucially `llvm.memcpy`/`llvm.memset`/`llvm.memmove` — counts as a call, because -O3 emitting one
+# that -O0 lacks IS loop-idiom recognition, the same artifact as rewriting a loop into `@strlen`.
+_IGNORED_CALLEES = ("llvm.lifetime", "llvm.dbg", "llvm.assume", "llvm.expect")
+
 
 def called_functions(ir: str) -> set[str]:
-    """Direct callees in a module. `llvm.*` intrinsics are excluded — they are codegen detail."""
-    return {m for m in _CALL_RE.findall(ir) if not m.startswith("llvm.")}
+    """Direct callees in a module. Indirect calls have no `@name` and are invisible here."""
+    return {m for m in _CALL_RE.findall(ir) if not m.startswith(_IGNORED_CALLEES)}
+
+
+def has_call(rec: CorpusRecord) -> bool:
+    """Does the -O3 baseline contain a call at all?
+
+    Matters because llvm-mca prices a single call at ~104 cycles (measured, aarch64/cortex-a72)
+    while a whole arithmetic function costs ~4. Any function containing a call therefore has its
+    cycle count swamped by a constant, and a rewrite that shaves one real cycle registers as a
+    ~1% "speedup" that is pure model artifact. Reported, not filtered — see docs/phase3.
+    """
+    return bool(called_functions(rec.o3_baseline_ir or ""))
 
 
 def introduces_calls(rec: CorpusRecord) -> bool:
@@ -73,9 +89,17 @@ def load_verified(path: Path) -> set[str]:
 
 
 def select_train(
-    records: list[CorpusRecord], verified: set[str] | None
+    records: list[CorpusRecord],
+    verified: set[str] | None,
+    cap: int = 0,
+    seed: int = 0,
 ) -> tuple[list[CorpusRecord], Counter]:
-    """Filter to functions that can actually produce reward signal. Returns (kept, drop reasons)."""
+    """Filter to functions that can actually produce reward signal. Returns (kept, drop reasons).
+
+    `cap` (0 = off) limits each (bucket, loops) stratum. Without it the oracle filter *worsens* the
+    skew — Alive2 verifies tiny loop-free functions most easily, and those are exactly the ones
+    Phase 2 found are already optimal at -O3, i.e. reward 0 on every rollout.
+    """
     kept: list[CorpusRecord] = []
     dropped: Counter = Counter()
     for rec in records:
@@ -91,6 +115,20 @@ def select_train(
             dropped["oracle could not verify -O0 == -O3"] += 1
         else:
             kept.append(rec)
+
+    if cap:
+        rng = random.Random(seed)
+        strata: dict[tuple[str, bool], list[CorpusRecord]] = {}
+        for rec in kept:
+            strata.setdefault((rec.size_bucket(), rec.has_loops), []).append(rec)
+        capped: list[CorpusRecord] = []
+        for group in strata.values():
+            if len(group) > cap:
+                dropped[f"over the {cap}/stratum cap"] += len(group) - cap
+                group = rng.sample(group, cap)
+            capped.extend(group)
+        capped.sort(key=lambda r: r.function_id)
+        kept = capped
     return kept, dropped
 
 
@@ -142,6 +180,12 @@ def main(argv: list[str] | None = None) -> int:
         "--cap-per-bucket", type=int, default=150, help="report corpus stratum cap"
     )
     p.add_argument(
+        "--train-cap-per-bucket",
+        type=int,
+        default=300,
+        help="train corpus stratum cap (0 = off). Default caps the tiny/loop-free flood.",
+    )
+    p.add_argument(
         "--seed", type=int, default=0, help="sampling seed (reproducibility)"
     )
     args = p.parse_args(argv)
@@ -157,7 +201,9 @@ def main(argv: list[str] | None = None) -> int:
             "!! no --verdicts: train corpus is NOT filtered to oracle-verifiable functions"
         )
 
-    train, dropped = select_train(records, verified)
+    train, dropped = select_train(
+        records, verified, args.train_cap_per_bucket, args.seed
+    )
     report, _ = select_report(records, args.cap_per_bucket, args.seed)
 
     _write(Path(args.out_train), train)
@@ -168,6 +214,13 @@ def main(argv: list[str] | None = None) -> int:
     for reason, n in dropped.most_common():
         print(f"    dropped {n:>5}  {reason}")
     print(_histogram(train))
+    n_call = sum(1 for r in train if has_call(r))
+    if n_call:
+        print(
+            f"    note: {n_call} ({n_call / len(train):.0%}) contain a call — llvm-mca prices one"
+            " call at ~104 cycles vs ~4 for plain arithmetic, so their cycle counts are"
+            " swamped by a constant. Prefer --perf timing for these."
+        )
     print(
         f"\nreport -> {args.out_report}  ({len(report)} functions, cap {args.cap_per_bucket})"
     )

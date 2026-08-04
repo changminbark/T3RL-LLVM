@@ -48,12 +48,17 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
       corpora in one pass: `report` (stratum-capped, balanced) and `train` (oracle-verifiable,
       artifact-filtered). `--max-functions` was never a sampling strategy — it truncates in
       `sorted(rglob("*.c"))` order (`build_corpus.py:180`), yielding the alphabetically-first N.
-- [ ] **Run it on the VM** once `verdicts.jsonl` exists (needs the `verify_corpus` rerun — the
-      previous run predates per-function verdict output):
-      `make_corpora --corpus testsuite-full.jsonl --verdicts results/verdicts.jsonl
-      --out-train train.jsonl --out-report report.jsonl`. Then re-run `perf_sanity` on `train` — it
-      should climb from 88% back toward Phase 1's 98% once `main`s and libc idioms are gone. **That
-      recovery is the check that the filter did what it claims.**
+- [x] **Ran on the VM 2026-08-03: train 1543 · report 695, and perf sanity went 88.0% → 96.6%**
+      (Phase 1 reference: 98%). The `main`/libc diagnosis held.
+- [ ] **Re-run `make_corpora` after the intrinsic fix.** `llvm.memcpy`/`memset` idiom recognition was
+      slipping through (all `llvm.*` was ignored); on the bootstrap corpus the drop count went 1 → 15.
+      Expect a few dozen more drops and perf sanity a little above 96.6%.
+- [ ] **Fix the train corpus shape — the oracle filter made the skew worse.** Verified-only is
+      **81% tiny/loop-free** (1251/1543) vs 66% raw, because Alive2 verifies exactly the functions
+      Phase 2 found are *already optimal at -O3*. No headroom ⇒ reward 0 on every rollout, same dead
+      weight as unverifiable. `--train-cap-per-bucket` (default 300) is a blunt stopgap; the real
+      filter is **headroom data from the `qwen3-8b` baseline** — keep functions that ever produced a
+      `verified_faster` sample. Do this *after* §4's baseline run, as its second output.
 - [ ] Add **real-world code**: functions mined from permissively-licensed GitHub C/C++/Rust repos, not
       just the test-suite (distribution TTRL would actually be deployed on).
 - [ ] Target ~500–1,000 deduped functions; publish the corpus + build recipe + **`PROBE_TARGET` and
@@ -131,6 +136,12 @@ is the throughput bottleneck.
 - [ ] **Reward shaping spec:** outcome → scalar in [0,1]. `verified_no_gain` must score **0** or we
       reopen the output-the-input-unchanged cheat; proposal is `1 - 1/speedup` for `verified_faster`.
       Decide before coding — it's a reviewer-visible choice tied to §6.
+- [ ] **Minimum relative speedup before `verified_faster`.** llvm-mca prices one call at **~104
+      cycles** vs ~4 for plain arithmetic (measured), so any call-containing function's score is
+      swamped by a constant and a 1-cycle change reads as a 1.009× "win" — a free, meaningless reward
+      the policy can farm. Require e.g. ≥5% before granting `verified_faster`, or score this
+      population with `--perf timing`. **Also re-check whether Phase 2's coverage numbers include
+      such artifacts.**
 - [ ] `src/probe/reward.py` (+ tests) and `scripts/rft/env_server.py` (the `/init` service). Prove the
       contract against `--backend mock --verifier stub` before wiring the real oracle.
 - [ ] Expose the env server over HTTPS (Fireworks dials *in*; needs a tunnel behind NAT) and bound

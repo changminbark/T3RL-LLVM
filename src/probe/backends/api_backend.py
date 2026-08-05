@@ -14,6 +14,24 @@ import httpx
 from .base import LLMBackend
 
 
+def _completion_text(choice: dict) -> str:
+    """The assistant text, tolerating reasoning models that split it from their scratchpad.
+
+    Reasoning models (gpt-oss, Qwen3, DeepSeek-R1) put chain-of-thought in `reasoning_content` and
+    the answer in `content`. If the token budget runs out mid-thought, `content` is empty or absent
+    entirely. That is a *truncation*, not a model failure: retrying is pointless and scoring it as
+    `invalid_syntax` would understate the model's real prior. Say so loudly instead.
+    """
+    msg = choice.get("message") or {}
+    text = msg.get("content") or ""
+    if not text and (msg.get("reasoning_content") or choice.get("finish_reason") == "length"):
+        print(
+            "  [api] empty completion: the token budget was consumed by reasoning "
+            "(finish_reason=length). Raise --max-tokens or lower reasoning effort."
+        )
+    return text
+
+
 class ApiBackend(LLMBackend):
     def __init__(
         self,
@@ -67,7 +85,7 @@ class ApiBackend(LLMBackend):
                     },
                 )
                 resp.raise_for_status()
-                return [c["message"]["content"] for c in resp.json()["choices"]]
+                return [_completion_text(c) for c in resp.json()["choices"]]
             except (httpx.HTTPError, KeyError, ValueError) as e:
                 if attempt == self.retries:
                     print(

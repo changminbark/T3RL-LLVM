@@ -9,21 +9,39 @@ Status: **not started.** This is the plan, the platform decision, and who does w
 ## The one thing to settle first (blocking)
 
 **Does a small, RFT-eligible model have a prior at all?** Phase 2's numbers come from
-`deepseek-v4-pro`; the free RFT tier only covers models <16B (`qwen3-8b`). If `qwen3-8b`'s
+`deepseek-v4-pro`; the free RFT tier only covers models <16B. If the base model's
 verified-faster rate is near zero, **every GRPO group is all-zero reward and there is no gradient** —
 the loop cannot bootstrap, and no amount of infra fixes it.
+
+> **Baseline model: `gpt-oss-20b`** (switched from `qwen3-8b` 2026-08-04, after that id failed to
+> authenticate against our Fireworks account). **Caveat, unresolved:** 20B total params is over the
+> <16B free-RFT threshold. It is MoE (~3.6B active), so it *may* qualify if Fireworks gates on active
+> params — confirm on their RFT pricing page. If it does not, this run still yields the capability
+> go/no-go and the headroom data for the v2 train corpus, but **not** the adapted-vs-base comparison
+> point, which must come from whatever model we can actually tune.
 
 The test needs no new code, and its output is *also* the required Phase 3 baseline (adapted-vs-base
 only means something against the same base model):
 
 ```bash
-uv run python -m probe.run_probe --corpus data/corpus/corpus.jsonl --backend api \
-    --model accounts/fireworks/models/qwen3-8b \
+source scripts/alive2/env.sh                # ALIVE_TV + LLVM_BIN
+export PROBE_TARGET=x86_64-linux-gnu       # must match the pair build_corpus used
+export PROBE_CPU=alderlake                 # i7-12700K; llvm-mca has a real model for it
+export FIREWORKS_API_KEY=fw_...            # `read -rs FIREWORKS_API_KEY` avoids shell mangling
+
+uv run python -m probe.run_probe --corpus data/corpus/train.jsonl --backend api \
+    --model accounts/fireworks/models/gpt-oss-20b \
     --base-url https://api.fireworks.ai/inference/v1 --api-key-env FIREWORKS_API_KEY \
-    --k 16 --verifier alive --perf mca --out results/qwen3-8b-base
-uv run python -m probe.phase2_baseline --rewrites results/qwen3-8b-base \
-    --corpus data/corpus/corpus.jsonl --ks 1,2,4,8,16
+    --k 16 --verifier alive --perf mca --out results/gpt-oss-20b-base
+uv run python -m probe.phase2_baseline --rewrites results/gpt-oss-20b-base \
+    --corpus data/corpus/train.jsonl --ks 1,2,4,8,16
 ```
+
+Run against **`train.jsonl`** (577 functions), not the full corpus: it is what Phase 3 would actually
+train on, and the headroom filter below only means anything over that set. Smoke-test on
+`head -20` at `--k 4` first — `gpt-oss-20b` is a reasoning model, and if its analysis channel leaks
+into the completion, `sanitize` may not recover the IR and `invalid_syntax` will dominate.
+`run_probe` is single-threaded, so shard the corpus across ~8 processes to use the box.
 
 **Go/no-go:** enough functions with ≥1 `verified_faster` sample to give GRPO non-degenerate groups.
 If it's too low, in order of preference: (1) `--format c` (emit C, lower with clang — sidesteps IR
@@ -47,7 +65,8 @@ re-emits near-identical rewrites constantly, so caching by `(src, tgt)` hash is 
 ## Platform: Fireworks RFT + Eval Protocol
 
 Chosen because we already have credits and the Phase 2 API path, and **RFT is free for models <16B**
-(`qwen3-4b` / `qwen3-8b` are tunable; LoRA rank ≤32, default 8).
+(`qwen3-4b` / `qwen3-8b` sit under it; LoRA rank ≤32, default 8). Whether `gpt-oss-20b` — our
+baseline model — clears that bar is open; see the caveat above.
 
 A Fireworks-*hosted* evaluator cannot work for us — the reward needs LLVM 21 + `alive-tv` + Z3, and
 their sandbox targets lightweight scoring ("evaluations should complete in seconds"). The escape
@@ -79,7 +98,7 @@ whole thesis is that the reward is a *proof*).
 
 ## The Debian VM: yes for the oracle, no for the GPU
 
-Specs: Debian, 14 threads, 14 GB RAM, 4 GB swap, 8 GB VRAM, 1.3 TB disk.
+Specs: Debian 13 (trixie), i7-12700K, 20 threads, 31 GB RAM, 1.3 TB disk, RTX 3070 Ti (8 GB VRAM).
 
 **Good for it.** `scripts/alive2/01-prereqs.sh` already has the apt path (`clang-21 llvm-21-dev`,
 `z3`), and `02-build-alive2.sh` builds *only* `alive-tv` — no LLVM from source, so the build is a few
@@ -88,10 +107,10 @@ real corpus (no header-skip hacks). 1.3 TB is ample.
 
 **Constraints, in order of how likely they are to bite:**
 
-1. **RAM, not cores, is the limit.** Do *not* run 14 `alive-tv` workers on 14 GB — each Z3 instance
-   can take 1–2 GB+, and touching the 4 GB swap silently turns proofs into `timeout` verdicts, which
-   **corrupts the reward signal**. Cap at ~6 workers with a per-worker memory limit so an OOM
-   surfaces as a clean tool error.
+1. **RAM, not cores, is the limit.** Each Z3 instance can take 1–2 GB+, and touching swap silently
+   turns proofs into `timeout` verdicts, which **corrupts the reward signal**. At 31 GB that supports
+   **~8–10 workers**, not all 20 threads. Set a per-worker memory limit so an OOM surfaces as a clean
+   tool error rather than a bogus verdict.
 2. **Public reachability.** Fireworks initiates the connection to `/init`, so the VM needs a
    publicly-reachable HTTPS endpoint (Cloudflare Tunnel or Tailscale Funnel behind NAT). It also
    inverts control: *they* drive concurrency, and their checklist assumes autoscaling — we must bound
@@ -105,10 +124,12 @@ real corpus (no header-skip hacks). 1.3 TB is ample.
    `timing.py` is unaffected (it strips target lines and retargets to host), which is precisely why a
    mismatched triple makes the §3 mca-vs-wall-clock audit meaningless. **mca cycles are only
    comparable within one target** — treat the triple as part of the corpus's identity.
-5. **`--perf timing` needs a quiet host.** If the VM shares a hypervisor with other tenants,
-   wall-clock is noisy. Keep `mca` as the RL reward; use `timing` for offline audits only, pinned
-   cores, low load.
-6. **8 GB VRAM cannot serve the policy** (a 7–8B model is ~14 GB in bf16 before optimizer state).
+5. **`--perf timing` needs a quiet host *and* P-core pinning.** Alder Lake is hybrid: `llvm-mca
+   -mcpu=alderlake` models the P-core only, and an unpinned wall-clock run goes bimodal as the
+   scheduler migrates work onto E-cores. Use `taskset -c 0-15`. Keep `mca` as the RL reward; use
+   `timing` for offline audits only, low load.
+6. **8 GB VRAM cannot serve the policy** (a 7–8B model is ~14 GB in bf16 before optimizer state;
+   `gpt-oss-20b` far more).
    Treat the VM as a dedicated oracle server.
 
 ### VM runbook (TODO §1)
@@ -164,7 +185,7 @@ and `verify_corpus` re-runs the Phase 1 Part A headline on the new distribution.
 be compared against Phase 1's (79% verified, 98% perf sanity) — a large drop means the new corpus is
 harder than what the oracle was validated on, and the honest scope needs revisiting *before* any RL.
 
-Run `verify_corpus` with the bounded worker pool (§7) once it exists; at ~6 workers and a 30 s
+Run `verify_corpus` with the bounded worker pool (§7) once it exists; at ~8 workers and a 30 s
 timeout, a few thousand functions is hours, not minutes.
 
 ### Corpus build result — 2026-08-02
@@ -235,7 +256,7 @@ Three things to take from this:
 instructions they are hopeless (1%, almost entirely `unsupported`).
 
 **Oracle throughput (the RL budget number):** 0.62 s mean per check serial (median 0.02–0.05 s, p90 up
-to 22 s on >150 loop-free). At the planned ~6 workers that is ~9.7 checks/s → **~1.6 s of oracle time
+to 22 s on >150 loop-free). At the planned ~8 workers that is ~13 checks/s → **~1.2 s of oracle time
 per G=16 GRPO step**. The oracle is *not* the bottleneck we feared, provided the corpus excludes the
 >150 buckets where p90 blows out.
 
@@ -305,7 +326,7 @@ which between them are most of what has interesting headroom.
 functions most easily, and those are exactly the ones Phase 2 found are *already optimal at -O3*. A
 function with no headroom returns reward 0 on every rollout just as surely as one that never verifies.
 `--train-cap-per-bucket` (default 300) blunts this, but the real filter needs headroom data we do not
-have yet: **the `qwen3-8b` baseline run produces it** — keep the functions that ever yielded a
+have yet: **the `gpt-oss-20b` baseline run produces it** — keep the functions that ever yielded a
 `verified_faster` sample, and that becomes the v2 train stream.
 
 ### Two derived corpora, not one
@@ -337,7 +358,7 @@ Write this down in a spec before coding; it's a reviewer-visible choice.
 ## Work split
 
 **Pipeline owner (macOS, no GPU):**
-- [ ] Run the `qwen3-8b` baseline above; publish the go/no-go.
+- [ ] Run the `gpt-oss-20b` baseline above; publish the go/no-go. Confirm RFT eligibility first.
 - [ ] `src/probe/reward.py` — outcome → scalar in [0,1], per the shaping above (+ tests).
 - [ ] `scripts/rft/env_server.py` — the `/init` service. Build it against the mock backend + stub
       verifier first, so the contract is proven before the oracle is involved.
@@ -350,7 +371,7 @@ Write this down in a spec before coding; it's a reviewer-visible choice.
       yet recorded in the repo**; see TODO §1 "the four numbers".*
 - [ ] Stratified sampler: full corpus → balanced subset by `(size_bucket, has_loops)`. Blocks the
       balanced corpus TODO §1 asks for; `--max-functions` cannot do this.
-- [ ] Parallel Alive2 worker pool (~6 workers, memory-capped) + verdict cache keyed on
+- [ ] Parallel Alive2 worker pool (~8 workers, memory-capped) + verdict cache keyed on
       `(src, tgt)` hash (TODO §7). **Report verified-rewrites/sec** — that number sets the rollout
       throughput ceiling and therefore the budget.
 - [ ] Expose the env server over HTTPS; document the tunnel setup.

@@ -7,16 +7,20 @@ the actual claim (a model that *learns* to beat that baseline). Ordered roughly 
 > **Phase 3 is now planned:** platform decision (Fireworks RFT + Eval Protocol), the
 > Fireworks-GPU / Debian-VM split, and the per-person work split live in
 > **[docs/phase3/README.md](docs/phase3/README.md)**. Items below marked **[P3-blocking]** are on its
-> critical path — do those first. Start with the `qwen3-8b` baseline in that doc: if a <16B model has
-> no prior, GRPO has no gradient and nothing else here matters.
+> critical path — do those first. Start with the `gpt-oss-20b` baseline in that doc: if a small model
+> has no prior, GRPO has no gradient and nothing else here matters.
 
-**The LLVM run box** (corpus build, Alive2, mca, timing): Debian, **14 threads / 14 GB RAM / 4 GB swap
-/ 1.3 TB disk** (8 GB VRAM — unused; the policy lives on Fireworks). Everything in this file that
-touches LLVM must fit that envelope. The two limits that actually bind:
+**The LLVM run box** (corpus build, Alive2, mca, timing): Debian 13, **i7-12700K, 20 threads / 31 GB
+RAM / 1.3 TB disk** (RTX 3070 Ti, 8 GB VRAM — unused; too small for an 8B policy plus GRPO optimizer
+state, so the policy lives on Fireworks). Everything in this file that touches LLVM must fit that
+envelope. The limits that actually bind:
 
-- **RAM, not cores.** Z3 can take 1–2 GB+ per `alive-tv`; **cap parallelism at ~6 workers**, memory-
-  limited. Touching the 4 GB swap turns proofs into `timeout` verdicts *silently* — that corrupts the
-  reward signal, so it must fail loudly instead (§7).
+- **RAM, not cores.** Z3 can take 1–2 GB+ per `alive-tv`; at 31 GB that supports **~8–10 workers**.
+  Touching swap turns proofs into `timeout` verdicts *silently* — that corrupts the reward signal, so
+  it must fail loudly instead (§7).
+- **Alder Lake is hybrid.** `llvm-mca -mcpu=alderlake` models the P-core only. Fine for static
+  scoring, but `--perf timing` (§3) must pin to P-cores (`taskset -c 0-15`) or wall-clock numbers go
+  bimodal as the scheduler migrates work onto E-cores.
 - **Set `PROBE_TARGET` *and* `PROBE_CPU` together — they must match.** Defaults are
   `aarch64-linux-gnu` + `cortex-a72` (`tools.py:26-27`), an ARM pair chosen as a *macOS* workaround.
   Setting only `PROBE_TARGET=x86_64-linux-gnu` leaves `-mcpu cortex-a72` against an x86 triple, and
@@ -59,7 +63,7 @@ Run order on the VM (details + one-time setup: [docs/phase3](docs/phase3/README.
       **81% tiny/loop-free** (1251/1543) vs 66% raw, because Alive2 verifies exactly the functions
       Phase 2 found are *already optimal at -O3*. No headroom ⇒ reward 0 on every rollout, same dead
       weight as unverifiable. `--train-cap-per-bucket` (default 300) is a blunt stopgap; the real
-      filter is **headroom data from the `qwen3-8b` baseline** — keep functions that ever produced a
+      filter is **headroom data from the `gpt-oss-20b` baseline** — keep functions that ever produced a
       `verified_faster` sample. Do this *after* §4's baseline run, as its second output.
 - [ ] Add **real-world code**: functions mined from permissively-licensed GitHub C/C++/Rust repos, not
       just the test-suite (distribution TTRL would actually be deployed on).
@@ -81,7 +85,7 @@ not "known", and the items below can't be scoped:
 - [x] **`verify_corpus` on the new corpus: 51.9% verified (1680/3239)** vs Phase 1's 79% — a
       *composition* difference, not a regression. Loop-free 58%, loops 14.1% (Phase 1's 4% was 1/23).
       **1,680 functions form the train-corpus pool.** Oracle throughput: 0.62 s mean/check serial →
-      ~1.6 s per G=16 step at 6 workers, so the oracle is **not** the feared bottleneck (excluding
+      ~1.2 s per G=16 step at 8 workers, so the oracle is **not** the feared bottleneck (excluding
       >150-instr functions, p90 22 s). Full table:
       [docs/phase3](docs/phase3/README.md#oracle--perf-sanity-on-the-new-corpus--2026-08-02).
 - [x] **`perf_sanity` on the new corpus: 88% monotonic (2847/3236)** vs Phase 1's 98%. Explained, not
@@ -121,9 +125,12 @@ counts). Today the honest scope is loop-free.
 
 ## 4. Model & prompt coverage
 
-- [ ] **`qwen3-8b` best-of-K baseline · [P3-blocking, do first]** — the RFT-free tier is <16B, so this
-      is both the Phase 3 go/no-go (no prior ⇒ all-zero GRPO groups ⇒ no gradient) and the mandatory
-      adapted-vs-base comparison point. Command + fallbacks: [docs/phase3](docs/phase3/README.md).
+- [ ] **`gpt-oss-20b` best-of-K baseline · [P3-blocking, do first]** — the Phase 3 go/no-go (no prior
+      ⇒ all-zero GRPO groups ⇒ no gradient) and the source of the headroom data §1 needs. Run it
+      against `train.jsonl`. Command + fallbacks: [docs/phase3](docs/phase3/README.md).
+      **Open:** 20B is over the <16B free-RFT threshold (MoE, ~3.6B active — may still qualify).
+      Confirm on Fireworks' RFT pricing page; if it is not tunable, the mandatory adapted-vs-base
+      comparison point needs a *second* baseline on a model we can actually tune.
 - [ ] **Multiple models / sizes:** Qwen2.5-Coder (7B/32B), DeepSeek, GPT, Claude — establish which have
       a real prior (SLM-vs-LLM is a known contrast; small models fail on IR syntax).
 - [ ] **Format ablation:** `--format ir` (raw IR) vs `--format c` (emit C, lower with clang) — the C
@@ -151,12 +158,12 @@ is the throughput bottleneck.
 - [ ] `src/probe/reward.py` (+ tests) and `scripts/rft/env_server.py` (the `/init` service). Prove the
       contract against `--backend mock --verifier stub` before wiring the real oracle.
 - [ ] Expose the env server over HTTPS (Fireworks dials *in*; needs a tunnel behind NAT) and bound
-      rollout concurrency — they drive it, our box has 14 GB.
+      rollout concurrency — they drive it, our box has 31 GB.
 - [ ] Wrap the Phase 2 reward (unchanged) in an **online RL loop** (GRPO-style, LoRA rank ≤32)
       over an unlabeled function stream.
 - [ ] **Adapted-vs-base at equal K:** the headline — does the fine-tuned model clear best-of-K at the
-      same sample budget, ideally shifting the whole K-curve up? (Base = the §4 `qwen3-8b` run, not
-      the deepseek Phase 2 numbers.)
+      same sample budget, ideally shifting the whole K-curve up? (Base = the §4 baseline run on the
+      *same* model that gets tuned, not the deepseek Phase 2 numbers.)
 - [ ] **Per-function dynamics:** flip rates, mode-collapse indicators, extinction-window analysis.
 - [ ] **Held-out generalization:** does adapting on one code distribution transfer to another?
 
@@ -176,12 +183,12 @@ is the throughput bottleneck.
 - [ ] **Parallelize Alive2** (the throughput bottleneck) and **cache verdicts** by (src, tgt) hash.
       **[P3-blocking]** — not cleanup: at `timeout_s=30` × G=16 rollouts an RL step can sit in Z3 for
       minutes, and the policy re-emits near-identical rewrites constantly, so the cache is a large
-      multiplier. On the VM cap at ~6 memory-limited workers: 14 workers on 14 GB will hit swap and
+      multiplier. On the VM cap at ~8 memory-limited workers: all 20 threads on 31 GB will hit swap and
       silently turn proofs into `timeout` verdicts, which corrupts the reward signal. **Report
       verified-rewrites/sec** — that number sets the rollout ceiling and the budget.
 - [ ] **`build_corpus --jobs N`** — `build_records` is fully serial (`build_corpus.py:151`): two
       `clang` invocations per file, then `llvm-extract` + `llvm-mca` per function, all on one core.
-      It uses 1 of the VM's 14 threads. Per-file work is independent, so a process pool over the
+      It uses 1 of the VM's 20 threads. Per-file work is independent, so a process pool over the
       file list is a near-linear win on the uncapped build. Keep dedup (`_norm_hash`) and
       `function_id` ordering deterministic so the corpus stays reproducible.
 - [x] **Fail loudly when the oracle is absent.** `verify_corpus` now aborts after 20 consecutive tool
